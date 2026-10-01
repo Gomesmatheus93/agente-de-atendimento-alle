@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { criarClienteAnthropic } from "./clienteAnthropic.js";
 import {
   DESCRICAO_ETAPA_FUNIL,
   ETAPAS_FUNIL,
@@ -85,7 +86,7 @@ Em motivo_detalhe, uma frase com o que o cliente disse (ou "" se não houver).
 - sanada: true se alguma mensagem da empresa depois dela respondeu com informação concreta; false se ficou sem resposta, se a resposta foi vaga ou se a conversa foi passada para um humano sem responder.`;
 
 export class AnalistaConversas {
-  private readonly cliente = new Anthropic();
+  private readonly cliente = criarClienteAnthropic();
   private readonly modelo = process.env.IA_MODELO ?? MODELO_PADRAO;
   private readonly esforco = (process.env.IA_ESFORCO ?? ESFORCO_PADRAO) as "low" | "medium" | "high";
 

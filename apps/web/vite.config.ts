@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // O .env fica na raiz do projeto, junto com o dos outros programas. O Vite só entrega ao navegador
+  // as variáveis que começam com VITE_; o resto (banco, chaves) não sai daqui.
+  envDir: "../..",
   server: {
     port: 5173,
     // Mesma origem para o navegador: sem CORS, e o cookie de sessão vale para as chamadas da API.

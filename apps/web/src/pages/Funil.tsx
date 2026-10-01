@@ -221,7 +221,7 @@ function PainelAnalise() {
           <p className="font-heading text-sm font-bold text-ink">Análise diária da IA</p>
           {status.data && !status.data.disponivel ? (
             <p className="text-xs text-amber-900">
-              Desligada: falta a <code className="font-mono">ANTHROPIC_API_KEY</code> no <code className="font-mono">.env</code> do worker. Sem ela, os cards
+              Desligada: falta a <code className="font-mono">ANTHROPIC_API_KEY</code> no <code className="font-mono">.env</code> da raiz do projeto (e reinicie o worker). Sem ela, os cards
               ficam em “Em conversa” e só mudam quando você arrasta.
             </p>
           ) : rodando ? (

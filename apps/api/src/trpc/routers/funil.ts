@@ -140,7 +140,7 @@ export const funilRouter = router({
     if (disponivel?.valor !== "1") {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
-        message: "A análise por IA está desligada: coloque a ANTHROPIC_API_KEY no .env do worker e reinicie o worker.",
+        message: "A análise por IA está desligada: coloque a ANTHROPIC_API_KEY no .env da raiz do projeto e reinicie o worker.",
       });
     }
     await pedirAnaliseDeConversas();

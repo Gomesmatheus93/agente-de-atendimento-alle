@@ -1,7 +1,8 @@
 import { defineConfig } from "drizzle-kit";
 
 try {
-  process.loadEnvFile();
+  // Um .env só, na raiz do projeto, para todos os programas (ver .env.example).
+  process.loadEnvFile("../../.env");
 } catch {
   // sem .env local: usa só as variáveis já presentes no ambiente
 }

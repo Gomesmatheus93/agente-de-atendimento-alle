@@ -59,13 +59,10 @@ Requer Node >= 22.9, pnpm, um banco PostgreSQL (o projeto usa o Supabase) e Redi
 
 ```bash
 pnpm install
-cp packages/db/.env.example packages/db/.env
-cp apps/api/.env.example apps/api/.env
-cp apps/worker/.env.example apps/worker/.env
-cp apps/web/.env.example apps/web/.env
+cp .env.example .env
 ```
 
-Preencha `DATABASE_URL` e `REDIS_URL`. **Credenciais do WhatsApp não vão em `.env`**: elas são cadastradas no painel, em Configurações.
+Preencha o `.env` da raiz — **um arquivo só para tudo**: API, worker, painel e comandos do banco leem dele (cada um usa só o que precisa; o painel só enxerga as variáveis `VITE_`). No mínimo `DATABASE_URL` e `REDIS_URL`. **Credenciais do WhatsApp não vão em `.env`**: elas são cadastradas no painel, em Configurações.
 
 Suba o banco, rode as migrations e abra o painel: no primeiro acesso ele pede para você criar seu usuário, que nasce **administrador**. Depois disso o login é obrigatório em todas as telas, e novos acessos são criados em **Usuários**.
 
@@ -79,7 +76,7 @@ pnpm db:generate  # gera nova migration após mudar o schema em packages/db/src/
 
 ## Banco (Supabase) e Redis
 
-O banco é um **PostgreSQL no Supabase** (projeto `allpfit-atendimento`, região São Paulo). A string de conexão fica em `DATABASE_URL` nos `.env` de `packages/db`, `apps/api` e `apps/worker` — pegue em **Connect** no painel do Supabase. A conexão direta (`db.<projeto>.supabase.co`) exige IPv6; em rede ou servidor só com IPv4, use a do **Session pooler** (porta 5432).
+O banco é um **PostgreSQL no Supabase** (projeto `allpfit-atendimento`, região São Paulo). A string de conexão fica em `DATABASE_URL`, no `.env` da raiz — pegue em **Connect** no painel do Supabase. A conexão direta (`db.<projeto>.supabase.co`) exige IPv6; em rede ou servidor só com IPv4, use a do **Session pooler** (porta 5432).
 
 - `pnpm db:migrate` aplica as migrations de `packages/db/migrations` no Supabase. A `0001_bloquear_api_publica` liga RLS em todas as tabelas: o Allp Chat conecta direto no Postgres e não usa a API REST do Supabase, então ela fica fechada.
 - As migrations antigas do MySQL ficaram em `packages/db/migrations-mysql`, só como histórico.
@@ -151,11 +148,11 @@ Uma conta pode ter vários números, e a plataforma trabalha com todos. Em **Nov
 
 ### Trava de bancada (`WHATSAPP_NUMEROS_PERMITIDOS`)
 
-Preenchida, só os telefones da lista recebem; qualquer outro destinatário é marcado `falhou` com o motivo, **sem nenhuma chamada à Meta**. Vale para disparo de campanha e para resposta da tela de Conversas. Vazia, não há trava. É uma das poucas coisas que continuam no `.env` do worker, junto de `WHATSAPP_SIMULAR=1`, que simula os envios em vez de falar com a Meta.
+Preenchida, só os telefones da lista recebem; qualquer outro destinatário é marcado `falhou` com o motivo, **sem nenhuma chamada à Meta**. Vale para disparo de campanha e para resposta da tela de Conversas. Vazia, não há trava. É uma das poucas coisas que continuam no `.env` (da raiz), junto de `WHATSAPP_SIMULAR=1`, que simula os envios em vez de falar com a Meta.
 
 ### Número de teste pré-preenchido (`VITE_TELEFONES_TESTE`)
 
-No `.env` do **web**, já deixa os telefones na caixa de destinatários de **Nova campanha**, para não digitar o próprio número a cada teste. Vírgula separa mais de um; vazio em produção.
+No `.env` da raiz, já deixa os telefones na caixa de destinatários de **Nova campanha**, para não digitar o próprio número a cada teste. Vírgula separa mais de um; vazio em produção.
 
 ### Webhook de recebimento
 
@@ -192,7 +189,7 @@ Tudo o que a IA sabe está em **`apps/worker/conhecimento/atendimento.md`**. Ela
 
 ### Configuração e custo
 
-No `.env` do **worker**: `ANTHROPIC_API_KEY` (obrigatória para a IA funcionar; sem ela o resto do sistema segue normal e os pedidos esperam na fila), e opcionalmente `IA_MODELO` (padrão `claude-opus-5`) e `IA_ESFORCO` (padrão `low`).
+No `.env` da raiz: `ANTHROPIC_API_KEY` (obrigatória para a IA funcionar; sem ela o resto do sistema segue normal e os pedidos esperam na fila), e opcionalmente `IA_MODELO` (padrão `claude-opus-5`) e `IA_ESFORCO` (padrão `low`).
 
 - As instruções e a base de conhecimento vão com **cache de prompt**, então conversas seguidas não pagam de novo por essa parte. O cache só vale a partir de um tamanho mínimo; com a base atual, pequena, ele pode não pegar — passa a valer conforme o arquivo cresce.
 - Cada sugestão grava os tokens de entrada e saída em `sugestoes_ia`, para acompanhar o gasto.
@@ -210,7 +207,7 @@ A tela **Funil de clientes** tem um card por cliente que respondeu, nas colunas 
 - **Análise diária (worker, `analise-conversas`):** todo dia às 3h (horário de Brasília) o worker lê, com o Claude, as conversas que tiveram mensagem nova desde a última análise e, para cada uma, posiciona o card, registra o motivo de não fechar, escreve um resumo e o próximo passo, e extrai as perguntas do cliente com um tema e se a conversa trouxe a resposta (`funil_clientes` e `duvidas_ia`). "Analisar agora" no Funil roda na hora. Até 200 conversas por rodada; o resto fica para a seguinte.
 - **Card movido à mão não é mudado pela IA** (só o resumo é atualizado). "Devolver à IA" no card desfaz isso.
 - **Ranking de dúvidas:** a aba *Análise da IA* da tela Dúvidas soma os temas e mostra, em destaque, as perguntas que ficaram **sem resposta** — o que acrescentar à base de conhecimento do agente no n8n. A aba *Palavras-chave* é o ranking antigo, que não depende da IA.
-- **Precisa de `ANTHROPIC_API_KEY` no `.env` do worker.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.
+- **Precisa de `ANTHROPIC_API_KEY` no `.env` da raiz do projeto.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.
 
 ## Usuários e acesso
 

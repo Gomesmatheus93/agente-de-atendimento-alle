@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
+import { criarClienteAnthropic } from "./clienteAnthropic.js";
 
 const MODELO_PADRAO = "claude-opus-5";
 // Rascunho de chat não ganha qualidade com raciocínio longo; a equipe revisa antes de enviar.
@@ -79,7 +80,7 @@ function montarConversa(pedido: PedidoDeSugestao): string {
 }
 
 export class AgenteAtendimento {
-  private readonly cliente = new Anthropic();
+  private readonly cliente = criarClienteAnthropic();
   private readonly modelo = process.env.IA_MODELO ?? MODELO_PADRAO;
   private readonly esforco = (process.env.IA_ESFORCO ?? ESFORCO_PADRAO) as "low" | "medium" | "high";
 
