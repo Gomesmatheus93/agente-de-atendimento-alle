@@ -1,0 +1,1 @@
+ALTER TABLE `campanhas_disparo` ADD `etapa_manual` enum('na-fila','enviando','concluida','com-falhas','falhou');

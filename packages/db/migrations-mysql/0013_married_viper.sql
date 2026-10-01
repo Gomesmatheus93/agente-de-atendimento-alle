@@ -1,0 +1,1 @@
+ALTER TABLE `usuarios` ADD `papel` enum('admin','membro') DEFAULT 'membro' NOT NULL;

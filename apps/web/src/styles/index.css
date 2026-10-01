@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-card-border: #e7e5e9;
+
+  /* A barra lateral é escura nos dois temas: vira moldura, e os dados ficam sendo a parte clara. */
+  --color-sidebar: #25083d;
+  --color-sidebar-ink: #f8f4fc;
+  --color-sidebar-ink-2: #bfaed6;
+  --color-sidebar-linha: #3d1a5c;
+
+  /* Cores da Allp Fit, do manual de marca publicado no site (allpfit.com.br): roxo #470e75, laranja
+     #ff6600 e o roxo quase preto #25083d, que aqui é a barra lateral. */
+  --color-accent: #470e75;
+  --color-accent-strong: #2d094b;
+  --color-accent-soft: #f2eafb;
+  /* Cor da marca quando usada como texto/ícone sobre fundo claro; nos preenchimentos vale --color-accent. */
+  --color-accent-text: #470e75;
+  /* Cor do texto/ícone que fica POR CIMA de --color-accent. */
+  --color-accent-contrast: #ffffff;
+
+  /* Laranja da Allp Fit: acento de atenção (contadores, destaques), nunca o fundo de textos longos. */
+  --color-brand-2: #ff6600;
+  --color-brand-2-soft: #fff1e6;
+  --color-brand-2-text: #b84a00;
+  --color-brand-2-contrast: #2b1000;
+
+  /* Verde de sucesso: reservado para "deu certo" (enviado, concluída, variação positiva). */
+  --color-success: #0a8f72;
+  --color-success-soft: #e6f5f0;
+  --color-success-text: #076b56;
+
+  --color-ink: #21172f;
+  --color-ink-2: #62586f;
+  --color-ink-3: #857b91;
+  --color-grid: #e6e1ef;
+  --color-baseline: #cfc7de;
+
+  /* Cores de status dos gráficos, validadas com validate_palette.js (modo claro, superfície #fff). */
+  --color-status-enviado: #0a8f72;
+  --color-status-falhou: #dc3e3e;
+  --color-status-pendente: #db8f00;
+  /* Azul frio, para não se confundir com o violeta da marca. */
+  --color-status-agendado: #1668c4;
+
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(31 20 38 / 0.06);
+  --shadow-pop: 0 8px 24px rgb(31 20 38 / 0.1);
+  --shadow-button: none;
+  --shadow-button-hover: none;
+}
+
+/* Em @layer base, senão estas regras (sem camada) vencem as utilidades do Tailwind, como outline-none. */
+@layer base {
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    background-color: var(--color-app-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+  }
+
+  /* Dado numérico não pode mudar de largura enquanto atualiza sozinho na tela. */
+  .tabular,
+  time,
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Campos de formulário com o mesmo acabamento em todas as telas. */
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+  textarea,
+  select {
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-card-border);
+    background-color: var(--color-surface);
+    box-shadow: var(--shadow-card);
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):hover,
+  textarea:hover,
+  select:hover {
+    border-color: var(--color-baseline);
+  }
+
+  input:not([type="radio"]):not([type="checkbox"]):not([type="file"]):focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgb(124 0 174 / 0.16);
+  }
+
+  ::placeholder {
+    color: var(--color-ink-3);
+    opacity: 0.8;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+    color: var(--color-ink);
+  }
+
+  button:not(:disabled),
+  a[href] {
+    cursor: pointer;
+  }
+}
+
+/*
+ * Tema escuro: só redefine as variáveis. As utilidades do Tailwind leem essas variáveis, então as telas
+ * não precisam de classes dark:. As rampas slate, amber e red são remapeadas porque os componentes as usam
+ * como fundos e realces neutros (não como texto de destaque).
+ */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-app-bg: #100a1c;
+  --color-surface: #1a1229;
+  --color-card-border: #2e2440;
+
+  --color-sidebar: #17062a;
+  --color-sidebar-ink: #ede8f5;
+  --color-sidebar-ink-2: #a898c2;
+  --color-sidebar-linha: #2c1445;
+
+  /* No escuro o roxo precisa clarear para continuar legível sobre o fundo. */
+  --color-accent: #b98ae8;
+  --color-accent-strong: #caa5f0;
+  --color-accent-soft: rgb(185 138 232 / 0.16);
+  --color-accent-text: #d3b6f5;
+  /* O roxo claro pede texto escuro por cima, não branco. */
+  --color-accent-contrast: #1c0630;
+
+  --color-brand-2: #ff8533;
+  --color-brand-2-soft: rgb(255 133 51 / 0.16);
+  --color-brand-2-text: #ffb27a;
+  --color-brand-2-contrast: #2b1000;
+
+  --color-success: #2fc4a0;
+  --color-success-soft: rgb(47 196 160 / 0.15);
+  --color-success-text: #5fe0bd;
+
+  --color-ink: #f0eaf7;
+  --color-ink-2: #b9aecb;
+  --color-ink-3: #948aa8;
+  --color-grid: #2e2440;
+  --color-baseline: #4b3f63;
+
+  --color-status-enviado: #2fc4a0;
+  --color-status-falhou: #f2716f;
+  --color-status-pendente: #f0ab2b;
+  --color-status-agendado: #6ab4ff;
+
+  --color-slate-50: #1c1430;
+  --color-slate-100: #241a3b;
+  --color-slate-200: #33274f;
+  --color-slate-300: #483a66;
+
+  --color-amber-50: #2a2110;
+  --color-amber-200: #5c4514;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+
+  --color-red-50: #2d1618;
+  --color-red-200: #6b2b30;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  --shadow-button: 0 5px 16px rgb(185 138 232 / 0.14);
+  --shadow-button-hover: 0 8px 24px rgb(185 138 232 / 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Rolagem discreta: barra fina no conteúdo e nenhuma na lateral, que raramente precisa rolar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-ink-3) 40%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-ink-3) 35%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-ink-3) 60%, transparent);
+}
+
+.sem-barra {
+  scrollbar-width: none;
+}
+
+.sem-barra::-webkit-scrollbar {
+  display: none;
+}

@@ -1,0 +1,125 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1789992380871,
+      "tag": "0000_tidy_infant_terrible",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790011508422,
+      "tag": "0001_fearless_daimon_hellstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790012648169,
+      "tag": "0002_amused_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790015360756,
+      "tag": "0003_known_shinko_yamashiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790016469959,
+      "tag": "0004_green_hannibal_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790017508604,
+      "tag": "0005_cynical_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1790018285027,
+      "tag": "0006_freezing_betty_brant",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1790078224344,
+      "tag": "0007_jittery_the_spike",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1790080664047,
+      "tag": "0008_wild_nicolaos",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1790087996702,
+      "tag": "0009_safe_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1790097364646,
+      "tag": "0010_dry_electro",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1790097618249,
+      "tag": "0011_outgoing_thunderbolts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1790097876925,
+      "tag": "0012_overconfident_swordsman",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1790099029047,
+      "tag": "0013_married_viper",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1790160194568,
+      "tag": "0014_late_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1790258979121,
+      "tag": "0015_outgoing_mysterio",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1790332145591,
+      "tag": "0016_lowly_toxin",
+      "breakpoints": true
+    }
+  ]
+}

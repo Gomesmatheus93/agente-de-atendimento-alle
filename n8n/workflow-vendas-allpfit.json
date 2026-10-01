@@ -1,0 +1,324 @@
+{
+  "name": "Venda AllpFit - Alle Chat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "venda-allpfit",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "9bc9b82a-c18a-4c1f-a185-3a7f6a256ee9",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        0
+      ],
+      "webhookId": "venda-allpfit"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1a1b1a1-0001-4001-8001-000000000001",
+              "name": "apiBase",
+              "value": "https://diamond-totally-sao-labs.trycloudflare.com",
+              "type": "string"
+            },
+            {
+              "id": "b1a1b1a1-0001-4001-8001-000000000002",
+              "name": "conhecimento",
+              "value": "COLE AQUI o conteúdo do arquivo n8n/conhecimento-vendas-allpfit.md (o texto inteiro, depois de preenchido)",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ae1ba18d-a935-4f2f-bc9c-a7a010c9565f",
+      "name": "Config e conhecimento",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config e conhecimento').item.json.apiBase }}/integracoes/conversas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "telefone",
+              "value": "={{ $('Webhook').item.json.body.telefone }}"
+            },
+            {
+              "name": "numeroId",
+              "value": "={{ $('Webhook').item.json.body.numeroId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0b4a221-9606-427b-bb62-265a84cd25f4",
+      "name": "Buscar conversa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -680,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Alle Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const webhookBody = $('Webhook').first().json.body;\nconst conhecimento = $('Config e conhecimento').first().json.conhecimento;\nconst conversa = $input.first().json; // saída de \"Buscar conversa\"\n\n// Monta o histórico em mensagens user/assistant para a Anthropic. Áudio e figurinha viram um aviso\n// em texto (o bot não vê mídia, igual ao agente interno). Envio que falhou não chegou ao cliente,\n// então fica de fora.\nconst historico = (conversa.mensagens || [])\n  .filter((mensagem) => !(mensagem.direcao === 'enviada' && mensagem.status === 'falhou'))\n  .map((mensagem) => {\n    let texto = mensagem.texto;\n    if (mensagem.tipo === 'audio') texto = '[cliente enviou um áudio]';\n    if (mensagem.tipo === 'figurinha') texto = '[cliente enviou uma figurinha]';\n    // Marca que a imagem já foi mandada: o bot vê isso e não manda de novo.\n    if (mensagem.tipo === 'imagem') texto = `[imagem enviada]${texto ? '\\n' + texto : ''}`;\n    return {\n      role: mensagem.direcao === 'recebida' ? 'user' : 'assistant',\n      content: texto || '(mensagem vazia)',\n    };\n  });\n\n// A Anthropic exige alternância estrita user/assistant, começando em user: junta mensagens seguidas\n// do mesmo papel em vez de mandar duas do mesmo lado em sequência.\nconst mensagens = [];\nfor (const linha of historico) {\n  const ultima = mensagens[mensagens.length - 1];\n  if (ultima && ultima.role === linha.role) ultima.content += '\\n' + linha.content;\n  else mensagens.push({ ...linha });\n}\nif (mensagens.length === 0 || mensagens[0].role !== 'user') {\n  // A conversa costuma abrir com o nosso disparo; a Anthropic exige que comece pelo cliente.\n  mensagens.unshift({ role: 'user', content: '[início da conversa]' });\n}\n\n// Alguém (equipe ou outra execução) já respondeu depois da última mensagem do cliente: não há o que\n// responder. Além disso, o modelo recusa (400) uma conversa que termina em mensagem do assistant.\nif (mensagens[mensagens.length - 1].role !== 'user') return [];\n\n// Dois blocos: o primeiro (base de conhecimento + regras) é igual em toda chamada e fica em cache por\n// 1 hora, cobrado a ~10% do preço nas leituras; o nome do cliente muda por conversa, então vem depois,\n// fora do cache — se viesse antes, cada cliente teria um cache só dele.\nconst system = [\n  {\n    type: 'text',\n    text: `${conhecimento}\n\nQuando puder responder, escreva só o texto da mensagem para o cliente — direto, sem introdução nem comentário.\nQuando precisar de uma pessoa da equipe (ver \"Situações que o bot não resolve sozinho\"), responda EXATAMENTE neste formato, nada mais:\nHUMANO: <motivo em uma frase>\n\nQuando for apresentar os planos (preços e o que cada um inclui), comece a resposta com a linha [IMAGEM:planos] sozinha: a tabela com os três planos vai anexada e o seu texto vira a legenda, então resuma em até 900 caracteres, sem repetir tudo o que a imagem já mostra. Mande essa imagem só uma vez por conversa: se o histórico já tem [imagem enviada], responda só com texto.`,\n    cache_control: { type: 'ephemeral', ttl: '1h' },\n  },\n  {\n    type: 'text',\n    text: `Nome do cliente, se você souber (pode não ser real, é o que a pessoa colocou no WhatsApp dela): ${conversa.nome || 'desconhecido'}`,\n  },\n];\n\nreturn [\n  {\n    json: {\n      telefone: webhookBody.telefone,\n      numeroId: webhookBody.numeroId,\n      system,\n      messages: mensagens,\n      // \"Extrair resposta\" usa para não mandar a imagem dos planos duas vezes na mesma conversa.\n      imagemJaEnviada: (conversa.mensagens || []).some((mensagem) => mensagem.tipo === 'imagem' && mensagem.status !== 'falhou'),\n    },\n  },\n];"
+      },
+      "id": "34c0535f-f2f5-4dd2-8ce5-77b109ffe3c8",
+      "name": "Montar mensagens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"model\": \"claude-sonnet-5\", \"max_tokens\": 16000, \"output_config\": { \"effort\": \"low\" }, \"system\": $json.system, \"messages\": $json.messages }) }}",
+        "options": {}
+      },
+      "id": "aef4e2bc-f9b2-42e6-99e1-6e6458648f04",
+      "name": "Perguntar ao Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        0
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      },
+      "notesInFlow": false,
+      "notes": "Se 'Predefined Credential Type: Anthropic' não aparecer no seu n8n, troque Authentication para 'Header Auth' e crie uma credencial com o header x-api-key = sua chave da Anthropic."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const resposta = $input.first().json;\nconst bloco = (resposta.content || []).find((b) => b.type === 'text');\nconst bruto = ((bloco && bloco.text) || '').trim();\n\n// [IMAGEM:nome] no texto pede para anexar uma imagem cadastrada no Allp Chat (Configurações → Imagens do\n// agente). O marcador sai do texto; o nome vai no campo \"imagem\".\nconst marcador = bruto.match(/\\[IMAGEM:([a-z0-9_-]+)\\]/i);\nconst texto = bruto.replace(/\\[IMAGEM:[a-z0-9_-]+\\]\\s*/gi, '').trim();\n\n// Rede de segurança: se o bot apresentou os planos (citou 2 ou mais dos preços) sem usar o marcador,\n// a tabela vai anexada do mesmo jeito — uma vez por conversa.\nconst PRECOS_DOS_PLANOS = ['129,90', '164,90', '219,90'];\nconst citouOsPlanos = PRECOS_DOS_PLANOS.filter((preco) => texto.includes(preco)).length >= 2;\nconst imagemJaEnviada = $('Montar mensagens').first().json.imagemJaEnviada;\nconst imagem = marcador ? marcador[1].toLowerCase() : citouOsPlanos && !imagemJaEnviada ? 'planos' : null;\n\nconst telefone = $('Montar mensagens').first().json.telefone;\nconst numeroId = $('Montar mensagens').first().json.numeroId;\n\nconst humano = (motivo) => [{ json: { modo: 'humano', telefone, numeroId, motivo } }];\n\nif (resposta.stop_reason === 'refusal') return humano('O modelo recusou responder esta conversa.');\nif (!texto) return humano('O bot não conseguiu gerar uma resposta.');\nif (texto.startsWith('HUMANO:')) {\n  return humano(texto.slice('HUMANO:'.length).trim() || 'O bot pediu atendimento humano.');\n}\n\nreturn [{ json: { modo: 'resposta', telefone, numeroId, texto, imagem } }];"
+      },
+      "id": "046da0ba-3abb-4255-82c6-c3e5e79cef38",
+      "name": "Extrair resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1c1d1c1-0001-4001-8001-000000000001",
+              "leftValue": "={{ $json.modo }}",
+              "rightValue": "humano",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f8d16321-559e-4282-b1cd-d7007b50a119",
+      "name": "Precisa humano?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config e conhecimento').item.json.apiBase }}/integracoes/conversas/humano",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"telefone\": $json.telefone, \"numeroId\": $json.numeroId, \"motivo\": $json.motivo } }}",
+        "options": {}
+      },
+      "id": "9b84cbe5-a8d9-45b7-a729-005e24e7b59f",
+      "name": "Passar para humano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Alle Chat API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config e conhecimento').item.json.apiBase }}/integracoes/mensagens",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"telefone\": $json.telefone, \"numeroId\": $json.numeroId, \"texto\": $json.texto, \"imagem\": $json.imagem || null }) }}",
+        "options": {}
+      },
+      "id": "26ba0226-5418-4b67-b701-961591052230",
+      "name": "Enviar resposta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Alle Chat API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config e conhecimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config e conhecimento": {
+      "main": [
+        [
+          {
+            "node": "Buscar conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar conversa": {
+      "main": [
+        [
+          {
+            "node": "Montar mensagens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar mensagens": {
+      "main": [
+        [
+          {
+            "node": "Perguntar ao Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perguntar ao Claude": {
+      "main": [
+        [
+          {
+            "node": "Extrair resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair resposta": {
+      "main": [
+        [
+          {
+            "node": "Precisa humano?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precisa humano?": {
+      "main": [
+        [
+          {
+            "node": "Passar para humano",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

@@ -1,0 +1,22 @@
+{
+  "name": "atendimento-academias",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @atendimento-academias/api dev",
+    "dev:worker": "pnpm --filter @atendimento-academias/worker dev",
+    "dev:web": "pnpm --filter @atendimento-academias/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @atendimento-academias/db generate",
+    "db:migrate": "pnpm --filter @atendimento-academias/db migrate",
+    "db:seed": "pnpm --filter @atendimento-academias/db seed",
+    "db:seed:demo": "pnpm --filter @atendimento-academias/db seed:demo"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "msgpackr-extract"]
+  }
+}
