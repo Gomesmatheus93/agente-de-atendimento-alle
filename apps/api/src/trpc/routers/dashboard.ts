@@ -7,9 +7,9 @@ import {
   sugestoesIa,
   templatesWhatsapp,
 } from "@atendimento-academias/db";
-import { resumoDashboardInputSchema } from "@atendimento-academias/shared";
-import { and, asc, count, countDistinct, desc, eq, gte, inArray, isNull, lt, max, ne } from "drizzle-orm";
-import { chaveDia, DIA_MS, diasAtras } from "../periodo.js";
+import { resumoVisaoInputSchema, type ResumoVisaoInput } from "@atendimento-academias/shared";
+import { and, asc, count, countDistinct, desc, eq, gte, inArray, isNull, lt, max, min, ne } from "drizzle-orm";
+import { chaveDia, diasEntre, inicioDoDia, somarDias } from "../periodo.js";
 import { carregarProgresso, carregarRespondentes, progressoVazio, taxa, type ProgressoPorStatus } from "../progresso.js";
 import { procedimentoAutenticado, router } from "../trpc.js";
 
@@ -21,6 +21,49 @@ const LIMITE_CAMPANHA_PARADA_MIN = 10;
 const MAX_MOTIVOS = 5;
 const MAX_ATENCAO = 5;
 const MAX_PROXIMOS = 4;
+// Acima disso o gráfico agrupa por mês: centenas de barras de um dia ficam ilegíveis.
+const MAX_DIAS_POR_DIA = 92;
+
+const DIAS_DO_PERIODO = { "7d": 7, "30d": 30, "90d": 90, "1a": 365 } as const;
+
+// Traduz o período escolhido na tela em dias do calendário (fuso da operação) e no período anterior,
+// de mesmo tamanho, que serve de comparação. "Todo período" não tem com o que comparar.
+function resolverPeriodo(entrada: ResumoVisaoInput, hoje: string, primeiroDia: string | null) {
+  let inicio: string;
+  let fim = hoje;
+  switch (entrada.periodo) {
+    case "hoje":
+      inicio = hoje;
+      break;
+    case "ontem":
+      inicio = fim = somarDias(hoje, -1);
+      break;
+    case "tudo":
+      inicio = primeiroDia && primeiroDia < hoje ? primeiroDia : hoje;
+      break;
+    case "personalizado":
+      inicio = entrada.inicio!;
+      fim = entrada.fim!;
+      break;
+    default:
+      inicio = somarDias(hoje, -(DIAS_DO_PERIODO[entrada.periodo] - 1));
+  }
+
+  const atual = diasEntre(inicio, fim);
+  const anterior = entrada.periodo === "tudo" ? [] : diasEntre(somarDias(inicio, -atual.length), somarDias(inicio, -1));
+  const comparacao =
+    entrada.periodo === "tudo"
+      ? null
+      : entrada.periodo === "hoje"
+        ? "vs ontem"
+        : entrada.periodo === "ontem"
+          ? "vs anteontem"
+          : entrada.periodo === "1a"
+            ? "vs ano anterior"
+            : `vs ${atual.length} ${atual.length === 1 ? "dia anterior" : "dias anteriores"}`;
+
+  return { inicio, fim, atual, anterior, comparacao };
+}
 
 interface Totais extends ProgressoPorStatus {
   taxaSucesso: number | null;
@@ -40,14 +83,25 @@ function somar(alvo: Totais, progresso: ProgressoPorStatus) {
 }
 
 export const dashboardRouter = router({
-  resumo: procedimentoAutenticado.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
-    const { dias } = input;
+  resumo: procedimentoAutenticado.input(resumoVisaoInputSchema).query(async ({ ctx, input }) => {
     const agora = Date.now();
+    const hoje = chaveDia(new Date(agora));
 
-    const chavesAtual = diasAtras(agora, dias - 1, 0);
-    const chavesAnterior = diasAtras(agora, 2 * dias - 1, dias);
+    // "Todo período" começa no primeiro disparo que já aconteceu.
+    const [primeiro] =
+      input.periodo === "tudo"
+        ? await ctx.db.select({ em: min(campanhasDisparo.disparoEm) }).from(campanhasDisparo).where(ne(campanhasDisparo.status, "agendada"))
+        : [{ em: null }];
+    const periodo = resolverPeriodo(input, hoje, primeiro?.em ? chaveDia(new Date(primeiro.em)) : null);
+    const dias = periodo.atual.length;
+    const chavesAtual = periodo.atual;
     const conjuntoAtual = new Set(chavesAtual);
-    const conjuntoAnterior = new Set(chavesAnterior);
+    const conjuntoAnterior = new Set(periodo.anterior);
+    const desde = inicioDoDia(periodo.anterior[0] ?? periodo.inicio);
+    const ate = inicioDoDia(somarDias(periodo.fim, 1));
+    // Período longo: o gráfico soma por mês (chave "YYYY-MM") em vez de dia.
+    const porMes = dias > MAX_DIAS_POR_DIA;
+    const pontoDoGrafico = (dia: string) => (porMes ? dia.slice(0, 7) : dia);
 
     const campanhas = await ctx.db
       .select({
@@ -61,7 +115,9 @@ export const dashboardRouter = router({
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
       // Campanha agendada ainda não disparou: não entra nos números de envio.
-      .where(and(ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, new Date(agora - (2 * dias + 1) * DIA_MS))))
+      .where(
+        and(ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, desde), lt(campanhasDisparo.disparoEm, ate)),
+      )
       .orderBy(desc(campanhasDisparo.disparoEm), desc(campanhasDisparo.id));
 
     const progressoPorCampanha = await carregarProgresso(
@@ -69,7 +125,9 @@ export const dashboardRouter = router({
       campanhas.map((campanha) => campanha.id),
     );
 
-    const serie = new Map(chavesAtual.map((dia) => [dia, { dia, enviado: 0, falhou: 0, pendente: 0 }]));
+    const serie = new Map(
+      [...new Set(chavesAtual.map(pontoDoGrafico))].map((dia) => [dia, { dia, enviado: 0, falhou: 0, pendente: 0 }]),
+    );
     const atual = totaisVazios();
     const anterior = totaisVazios();
     const campanhasDoPeriodo: Array<(typeof campanhas)[number] & { progresso: ProgressoPorStatus }> = [];
@@ -80,7 +138,7 @@ export const dashboardRouter = router({
       const dia = chaveDia(campanha.createdAt);
 
       if (conjuntoAtual.has(dia)) {
-        const ponto = serie.get(dia)!;
+        const ponto = serie.get(pontoDoGrafico(dia))!;
         ponto.enviado += progresso.enviado;
         ponto.falhou += progresso.falhou;
         ponto.pendente += progresso.pendente;
@@ -241,6 +299,14 @@ export const dashboardRouter = router({
 
     return {
       dias,
+      periodo: {
+        tipo: input.periodo,
+        inicio: periodo.inicio,
+        fim: periodo.fim,
+        agrupamento: porMes ? ("mes" as const) : ("dia" as const),
+        // Texto da comparação ("vs ontem", "vs 7 dias anteriores"); nulo em "Todo período".
+        comparacao: periodo.comparacao,
+      },
       serie: [...serie.values()],
       atual,
       anterior,

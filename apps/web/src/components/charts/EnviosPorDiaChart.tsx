@@ -45,7 +45,16 @@ function caminhoTopoArredondado(x: number, y: number, largura: number, altura: n
   return `M${x},${y + altura} V${y + r} Q${x},${y} ${x + r},${y} H${x + largura - r} Q${x + largura},${y} ${x + largura},${y + r} V${y + altura} Z`;
 }
 
-export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
+// Períodos longos chegam somados por mês (chave "YYYY-MM"); o resto, por dia ("YYYY-MM-DD").
+function rotulosDe(agrupamento: "dia" | "mes") {
+  if (agrupamento === "dia") return { curto: formatarDiaCurto, longo: formatarDiaLongo, titulo: "Envios por dia", unidade: "dias" };
+  const mes = (chave: string, formato: "short" | "long") =>
+    new Date(`${chave}-15T12:00:00`).toLocaleDateString("pt-BR", { month: formato, year: formato === "short" ? "2-digit" : "numeric" });
+  return { curto: (chave: string) => mes(chave, "short"), longo: (chave: string) => mes(chave, "long"), titulo: "Envios por mês", unidade: "meses" };
+}
+
+export function EnviosPorDiaChart({ serie, agrupamento = "dia" }: { serie: PontoDia[]; agrupamento?: "dia" | "mes" }) {
+  const rotulos = rotulosDe(agrupamento);
   const [modo, setModo] = useState<"grafico" | "tabela">("grafico");
   const [ativo, setAtivo] = useState<number | null>(null);
   const { ref, largura } = useLargura<HTMLDivElement>();
@@ -94,7 +103,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-heading text-sm font-bold">Envios por dia</h3>
+          <h3 className="font-heading text-sm font-bold">{rotulos.titulo}</h3>
           <p className="text-xs text-ink-3">
             <strong className="tabular-nums text-ink-2">{formatarNumero(totalGeral)}</strong> mensagens no período
           </p>
@@ -131,7 +140,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
             <tbody className="tabular-nums">
               {serie.map((ponto) => (
                 <tr key={ponto.dia} className="border-b border-card-border last:border-0">
-                  <td className="py-1.5">{formatarDiaLongo(ponto.dia)}</td>
+                  <td className="py-1.5">{rotulos.longo(ponto.dia)}</td>
                   <td className="py-1.5 text-right">{formatarNumero(ponto.enviado)}</td>
                   <td className="py-1.5 text-right">{formatarNumero(ponto.falhou)}</td>
                   <td className="py-1.5 text-right">{formatarNumero(ponto.pendente)}</td>
@@ -148,7 +157,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
           style={{ height: ALTURA }}
           tabIndex={0}
           role="group"
-          aria-label="Gráfico de envios por dia. Use as setas para percorrer os dias."
+          aria-label={`${rotulos.titulo}. Use as setas para percorrer os ${rotulos.unidade}.`}
           onKeyDown={aoTeclar}
           onFocus={() => setAtivo((atual) => atual ?? serie.length - 1)}
           onBlur={() => setAtivo(null)}
@@ -222,7 +231,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
 
                     {(serie.length - 1 - indice) % passoRotulo === 0 && (
                       <text x={MARGEM.esquerda + (indice + 0.5) * faixa} y={ALTURA - 8} textAnchor="middle" fontSize={11} fill="var(--color-ink-3)">
-                        {formatarDiaCurto(ponto.dia)}
+                        {rotulos.curto(ponto.dia)}
                       </text>
                     )}
                   </g>
@@ -247,7 +256,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
               className="pointer-events-none absolute z-10 min-w-40 rounded-lg border border-card-border bg-surface px-3 py-2 text-xs shadow-pop"
               style={{ left: xAtivo, top: 4, transform: deslocamentoTooltip }}
             >
-              <p className="mb-1 font-medium text-ink-2">{formatarDiaLongo(pontoAtivo.dia)}</p>
+              <p className="mb-1 font-medium text-ink-2">{rotulos.longo(pontoAtivo.dia)}</p>
               <ul className="flex flex-col gap-1">
                 {SERIES.map((item) => (
                   <li key={item.chave} className="flex items-center gap-2">
@@ -265,7 +274,7 @@ export function EnviosPorDiaChart({ serie }: { serie: PontoDia[] }) {
 
           <p className="sr-only" aria-live="polite">
             {pontoAtivo
-              ? `${formatarDiaLongo(pontoAtivo.dia)}: ${pontoAtivo.enviado} enviados, ${pontoAtivo.falhou} falhas, ${pontoAtivo.pendente} pendentes.`
+              ? `${rotulos.longo(pontoAtivo.dia)}: ${pontoAtivo.enviado} enviados, ${pontoAtivo.falhou} falhas, ${pontoAtivo.pendente} pendentes.`
               : ""}
           </p>
         </div>

@@ -1,6 +1,6 @@
-import type { PeriodoDashboard } from "@atendimento-academias/shared";
+import { PERIODOS_VISAO } from "@atendimento-academias/shared";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "../components/Card.js";
 import { EnviosPorDiaChart } from "../components/charts/EnviosPorDiaChart.js";
 import { MotivosFalhaBars } from "../components/charts/MotivosFalhaBars.js";
@@ -8,7 +8,7 @@ import { StatusBadge } from "../components/StatusBadge.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
 import { Icone } from "../components/ui/Icone.js";
 import { ProgressBar } from "../components/ui/ProgressBar.js";
-import { SeletorPeriodo } from "../components/ui/SeletorPeriodo.js";
+import { SeletorPeriodoVisao, type PeriodoEscolhido } from "../components/ui/SeletorPeriodoVisao.js";
 import { formatarMoeda, formatarNumero, formatarPercentual, formatarQuando, tempoRelativo } from "../lib/format.js";
 import { hrefDe } from "../lib/route.js";
 import { trpc, type SaidaApi } from "../lib/trpc.js";
@@ -16,23 +16,59 @@ import { variacaoEmPontos, variacaoPercentual } from "../lib/variacao.js";
 
 type Resumo = SaidaApi["dashboard"]["resumo"];
 
-export function VisaoGeral() {
-  const [dias, setDias] = useState<PeriodoDashboard>(7);
+// Os números se atualizam sozinhos de hora em hora (e ao voltar para a aba); "Atualizar agora" força na hora.
+const ATUALIZACAO_MS = 60 * 60 * 1000;
+const CHAVE_PERIODO = "visao-geral-periodo";
 
-  const resumoQuery = trpc.dashboard.resumo.useQuery(
-    { dias },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: (query) => (query.state.data?.campanhasEmAndamento ? 3000 : 15000),
-    },
-  );
+// O período escolhido fica lembrado neste navegador.
+function periodoSalvo(): PeriodoEscolhido {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_PERIODO) ?? "null") as PeriodoEscolhido | null;
+    if (salvo && (PERIODOS_VISAO as readonly string[]).includes(salvo.periodo)) return salvo;
+  } catch {
+    // sem armazenamento: começa no padrão
+  }
+  return { periodo: "7d" };
+}
+
+export function VisaoGeral() {
+  const [periodo, setPeriodo] = useState<PeriodoEscolhido>(periodoSalvo);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAVE_PERIODO, JSON.stringify(periodo));
+    } catch {
+      // sem armazenamento: vale só nesta visita
+    }
+  }, [periodo]);
+
+  const resumoQuery = trpc.dashboard.resumo.useQuery(periodo, {
+    placeholderData: keepPreviousData,
+    refetchInterval: ATUALIZACAO_MS,
+  });
 
   const resumo = resumoQuery.data;
+  const atualizadoEm = resumoQuery.dataUpdatedAt ? new Date(resumoQuery.dataUpdatedAt) : null;
+  const hora = (data: Date) => data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex justify-end">
-        <SeletorPeriodo dias={dias} onChange={setDias} />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="flex items-center gap-2 pt-2 text-xs text-ink-3">
+          {atualizadoEm && (
+            <>
+              Atualizado às {hora(atualizadoEm)} · próxima às {hora(new Date(atualizadoEm.getTime() + ATUALIZACAO_MS))}
+              <button
+                type="button"
+                onClick={() => void resumoQuery.refetch()}
+                disabled={resumoQuery.isFetching}
+                className="font-semibold text-accent-text hover:underline disabled:opacity-50"
+              >
+                {resumoQuery.isFetching ? "Atualizando…" : "Atualizar agora"}
+              </button>
+            </>
+          )}
+        </p>
+        <SeletorPeriodoVisao valor={periodo} onChange={setPeriodo} />
       </div>
 
       {!resumo && resumoQuery.isError && (
@@ -61,8 +97,9 @@ function CarregandoResumo() {
 }
 
 function ConteudoResumo({ resumo, atualizando }: { resumo: Resumo; atualizando: boolean }) {
-  const { atual, anterior, dias } = resumo;
-  const referencia = `vs ${dias} dias anteriores`;
+  const { atual, anterior } = resumo;
+  const comparar = resumo.periodo.comparacao !== null;
+  const referencia = resumo.periodo.comparacao ?? "em todo o período";
   const semNadaAinda =
     atual.total === 0 &&
     anterior.total === 0 &&
@@ -91,11 +128,11 @@ function ConteudoResumo({ resumo, atualizando }: { resumo: Resumo; atualizando: 
     <div className={`flex flex-col gap-5 transition-opacity ${atualizando ? "opacity-60" : ""}`}>
       <FilaDeAtendimento resumo={resumo} />
 
-      <Numeros resumo={resumo} referencia={referencia} />
+      <Numeros resumo={resumo} referencia={referencia} comparar={comparar} />
 
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          <EnviosPorDiaChart serie={resumo.serie} />
+          <EnviosPorDiaChart serie={resumo.serie} agrupamento={resumo.periodo.agrupamento} />
         </div>
         <div className="flex flex-col gap-4">
           <ProximosDisparos agendadas={resumo.agendadas} />
@@ -186,20 +223,21 @@ function corDaVariacao(variacao: { direcao: "alta" | "queda" | "estavel"; altaEh
   return boa ? "text-success-text" : "text-brand-2-text";
 }
 
-function Numeros({ resumo, referencia }: { resumo: Resumo; referencia: string }) {
+// Em "Todo período" não há período anterior: os números aparecem sem a variação.
+function Numeros({ resumo, referencia, comparar }: { resumo: Resumo; referencia: string; comparar: boolean }) {
   const { atual, anterior } = resumo;
 
   const itens = [
     {
       rotulo: "Mensagens enviadas",
       valor: formatarNumero(atual.enviado),
-      variacao: variacaoPercentual(atual.enviado, anterior.enviado, true),
+      variacao: comparar ? variacaoPercentual(atual.enviado, anterior.enviado, true) : undefined,
       apoio: referencia,
     },
     {
       rotulo: "Respostas",
       valor: formatarNumero(resumo.respostas.atual),
-      variacao: variacaoPercentual(resumo.respostas.atual, resumo.respostas.anterior, true),
+      variacao: comparar ? variacaoPercentual(resumo.respostas.atual, resumo.respostas.anterior, true) : undefined,
       apoio:
         resumo.taxaRetorno.atual !== null ? `${formatarPercentual(resumo.taxaRetorno.atual)} de quem recebeu` : referencia,
     },
@@ -213,7 +251,7 @@ function Numeros({ resumo, referencia }: { resumo: Resumo; referencia: string })
     {
       rotulo: "Entrega",
       valor: formatarPercentual(atual.taxaSucesso),
-      variacao: variacaoEmPontos(atual.taxaSucesso, anterior.taxaSucesso),
+      variacao: comparar ? variacaoEmPontos(atual.taxaSucesso, anterior.taxaSucesso) : undefined,
       apoio: atual.falhou > 0 ? `${formatarNumero(atual.falhou)} falharam` : "nenhuma falha",
     },
   ];
