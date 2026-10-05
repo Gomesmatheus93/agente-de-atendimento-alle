@@ -27,6 +27,14 @@ function carregarChave(): Buffer {
     return chaveEmMemoria;
   }
 
+  // No servidor a chave tem que vir da variável: criar uma nova em silêncio deixaria os tokens já salvos
+  // no banco impossíveis de abrir (e o WhatsApp parado sem erro claro).
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CHAVE_CRIPTOGRAFIA não configurada. Use o mesmo valor do arquivo .chave-criptografia do ambiente onde as credenciais foram salvas.",
+    );
+  }
+
   const nova = randomBytes(32);
   mkdirSync(dirname(ARQUIVO_CHAVE), { recursive: true });
   writeFileSync(ARQUIVO_CHAVE, nova.toString("base64"), { mode: 0o600 });

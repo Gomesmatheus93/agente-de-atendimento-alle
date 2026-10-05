@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import * as trpcExpress from "@trpc/server/adapters/express";
 import express from "express";
 import { criarRouterIntegracoes } from "./integracoes/router.js";
@@ -26,6 +28,16 @@ painel.use("/uploads", express.static(diretorioDeUploads(), { maxAge: "30d", imm
 painel.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+// No servidor não há Vite: o painel montado (vite build) é servido daqui, na mesma origem do /trpc — o
+// cookie de sessão vale sem CORS, como no proxy do Vite em desenvolvimento. WEB_DIST só existe no container.
+const webDist = process.env.WEB_DIST ? path.resolve(process.env.WEB_DIST) : null;
+if (webDist && existsSync(path.join(webDist, "index.html"))) {
+  painel.use(express.static(webDist, { index: false, maxAge: "1h" }));
+  // A navegação do painel é por hash (#/...): qualquer outro GET devolve a página principal.
+  painel.get(/^\/(?!trpc|uploads|health).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+  console.log(`painel web servido de ${webDist}`);
+}
 
 const webhook = express();
 webhook.use("/webhooks/whatsapp", criarWebhookWhatsapp());
