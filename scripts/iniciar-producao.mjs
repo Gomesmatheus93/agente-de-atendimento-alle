@@ -34,6 +34,13 @@ if (faltando.length > 0) {
   process.exit(1);
 }
 
+// O painel precisa aceitar conexões de fora do container (o proxy do easypanel). PAINEL_HOST=127.0.0.1 vem
+// do .env de desenvolvimento e deixaria o painel inacessível ("Service is not reachable").
+if (["127.0.0.1", "localhost", "::1"].includes(process.env.PAINEL_HOST?.trim() ?? "")) {
+  console.warn(`[iniciar] PAINEL_HOST=${process.env.PAINEL_HOST} é de desenvolvimento; usando 0.0.0.0. Pode apagar essa variável.`);
+  process.env.PAINEL_HOST = "0.0.0.0";
+}
+
 const urlBanco = process.env.DATABASE_URL.trim();
 const hostBanco = urlBanco.replace(/^[^@]*@/, "").replace(/[/?].*$/, "");
 console.log(`[iniciar] testando o banco em ${hostBanco}...`);
