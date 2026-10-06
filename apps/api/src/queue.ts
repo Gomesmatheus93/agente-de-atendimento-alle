@@ -1,4 +1,9 @@
 import {
+  ANALISE_CONVERSA_ATRASO_MS,
+  ANALISE_CONVERSA_JOB_NAME,
+  ANALISE_CONVERSA_QUEUE_NAME,
+  type AnaliseConversaJobData,
+  analiseConversaJobId,
   ANALISE_CONVERSAS_JOB_NAME,
   ANALISE_CONVERSAS_QUEUE_NAME,
   type AnaliseConversasJobData,
@@ -72,4 +77,26 @@ let analiseQueue: Queue<AnaliseConversasJobData> | undefined;
 export async function pedirAnaliseDeConversas(): Promise<void> {
   analiseQueue ??= criarFila<AnaliseConversasJobData>(ANALISE_CONVERSAS_QUEUE_NAME);
   await analiseQueue.add(ANALISE_CONVERSAS_JOB_NAME, { origem: "manual" }, { jobId: "analise-manual", removeOnComplete: true, removeOnFail: true });
+}
+
+let analiseConversaQueue: Queue<AnaliseConversaJobData> | undefined;
+
+// Funil ao vivo: pede a análise desta conversa para daqui a pouco. Pedidos repetidos enquanto ela ainda
+// espera só empurram o horário (debounce do BullMQ), então a IA lê a conversa uma vez, quando ela acalma.
+// Nunca derruba quem chamou: sem Redis, o card espera a rodada diária.
+export function pedirAnaliseDaConversa(numeroId: number, telefone: string): void {
+  analiseConversaQueue ??= criarFila<AnaliseConversaJobData>(ANALISE_CONVERSA_QUEUE_NAME);
+  const id = analiseConversaJobId(numeroId, telefone);
+  analiseConversaQueue
+    .add(
+      ANALISE_CONVERSA_JOB_NAME,
+      { numeroId, telefone },
+      {
+        delay: ANALISE_CONVERSA_ATRASO_MS,
+        deduplication: { id, ttl: ANALISE_CONVERSA_ATRASO_MS, extend: true, replace: true },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    )
+    .catch((erro) => console.error(`[funil] não foi possível pedir a análise de ${telefone}:`, erro));
 }

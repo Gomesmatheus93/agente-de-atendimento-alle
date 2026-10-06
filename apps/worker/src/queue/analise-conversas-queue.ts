@@ -11,6 +11,8 @@ import {
   type Db,
 } from "@atendimento-academias/db";
 import {
+  ANALISE_CONVERSA_QUEUE_NAME,
+  type AnaliseConversaJobData,
   ANALISE_CONVERSAS_JOB_NAME,
   ANALISE_CONVERSAS_QUEUE_NAME,
   ANALISE_DIARIA_SCHEDULER_ID,
@@ -93,6 +95,75 @@ async function conversasComNovidade(db: Db) {
   return { pendentes, funil, chave };
 }
 
+// Lê a conversa, pede a análise à IA e grava a etapa do funil e as dúvidas. Usada pela rodada diária e
+// pela análise ao vivo de uma conversa. "sem_cliente" = o cliente ainda não escreveu nada (não há o que
+// analisar); null = a IA não devolveu uma análise válida.
+async function analisarConversa(
+  db: Db,
+  analista: AnalistaConversas,
+  conversa: { numeroId: number; telefone: string; ultima: Date },
+  temas: string[],
+  // Etapa movida à mão pela equipe vale mais que a análise: a IA só atualiza o resumo.
+  manual: boolean,
+): Promise<{ tokensEntrada: number; tokensSaida: number } | null | "sem_cliente"> {
+  const mensagens = await carregarConversa(db, conversa.telefone, conversa.numeroId, MAX_MENSAGENS_ANALISADAS);
+  if (!mensagens.some((mensagem) => mensagem.autor === "cliente")) return "sem_cliente";
+
+  const [contato] = await db.select({ nome: contatos.nomePerfil }).from(contatos).where(eq(contatos.telefone, conversa.telefone));
+  const resultado = await analista.analisar(mensagens, contato?.nome ?? null, temas);
+  if (!resultado) return null;
+
+  const analise = {
+    resumo: resultado.resumo || null,
+    proximoPasso: resultado.proximoPasso || null,
+    analisadoEm: new Date(),
+    ultimaMensagemAnalisada: conversa.ultima,
+  };
+  const etapa = manual
+    ? {}
+    : {
+        etapa: resultado.etapa,
+        etapaOrigem: "ia" as const,
+        motivoPerda: resultado.motivoPerda,
+        motivoDetalhe: resultado.motivoPerda ? resultado.motivoDetalhe || null : null,
+      };
+
+  await db
+    .insert(funilClientes)
+    .values({ numeroId: conversa.numeroId, telefone: conversa.telefone, ...analise, ...etapa })
+    .onConflictDoUpdate({ target: [funilClientes.numeroId, funilClientes.telefone], set: { ...analise, ...etapa } });
+
+  await db
+    .delete(duvidasIa)
+    .where(and(eq(duvidasIa.numeroId, conversa.numeroId), eq(duvidasIa.telefone, conversa.telefone)));
+  if (resultado.perguntas.length > 0) {
+    await db.insert(duvidasIa).values(
+      resultado.perguntas.map((pergunta) => ({
+        numeroId: conversa.numeroId,
+        telefone: conversa.telefone,
+        tema: pergunta.tema,
+        pergunta: pergunta.pergunta,
+        sanada: pergunta.sanada,
+        perguntadaEm: mensagens[pergunta.mensagem - 1]!.em,
+      })),
+    );
+    for (const { tema } of resultado.perguntas) if (!temas.includes(tema)) temas.push(tema);
+  }
+  return { tokensEntrada: resultado.tokensEntrada, tokensSaida: resultado.tokensSaida };
+}
+
+async function temasDeReferencia(db: Db, unidadeId: number): Promise<string[]> {
+  return (
+    await db
+      .select({ tema: duvidasIa.tema, vezes: count() })
+      .from(duvidasIa)
+      .where(doNumeroDaUnidade(duvidasIa.numeroId, unidadeId))
+      .groupBy(duvidasIa.tema)
+      .orderBy(desc(count()))
+      .limit(MAX_TEMAS_DE_REFERENCIA)
+  ).map((linha) => linha.tema);
+}
+
 async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: AnaliseConversasJobData["origem"]): Promise<void> {
   const inicio = new Date().toISOString();
   await salvarStatus(db, { situacao: "rodando", origem, inicio });
@@ -112,15 +183,7 @@ async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: Analise
   async function temasDaUnidade(unidadeId: number): Promise<string[]> {
     let temas = temasPorUnidade.get(unidadeId);
     if (!temas) {
-      temas = (
-        await db
-          .select({ tema: duvidasIa.tema, vezes: count() })
-          .from(duvidasIa)
-          .where(doNumeroDaUnidade(duvidasIa.numeroId, unidadeId))
-          .groupBy(duvidasIa.tema)
-          .orderBy(desc(count()))
-          .limit(MAX_TEMAS_DE_REFERENCIA)
-      ).map((linha) => linha.tema);
+      temas = await temasDeReferencia(db, unidadeId);
       temasPorUnidade.set(unidadeId, temas);
     }
     return temas;
@@ -133,59 +196,17 @@ async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: Analise
 
   for (const conversa of daRodada) {
     try {
-      const mensagens = await carregarConversa(db, conversa.telefone, conversa.numeroId, MAX_MENSAGENS_ANALISADAS);
-      if (!mensagens.some((mensagem) => mensagem.autor === "cliente")) continue;
-
       const unidadeId = unidadePorNumero.get(conversa.numeroId);
       if (unidadeId === undefined) continue;
-      const temas = await temasDaUnidade(unidadeId);
-      const [contato] = await db.select({ nome: contatos.nomePerfil }).from(contatos).where(eq(contatos.telefone, conversa.telefone));
-      const resultado = await analista.analisar(mensagens, contato?.nome ?? null, temas);
+      const manual = funil.get(chave(conversa.numeroId, conversa.telefone))?.etapaOrigem === "manual";
+      const resultado = await analisarConversa(db, analista, conversa, await temasDaUnidade(unidadeId), manual);
+      if (resultado === "sem_cliente") continue;
       if (!resultado) {
         erros += 1;
         continue;
       }
       tokensEntrada += resultado.tokensEntrada;
       tokensSaida += resultado.tokensSaida;
-
-      // Etapa movida à mão pela equipe vale mais que a análise: a IA só atualiza o resumo.
-      const manual = funil.get(chave(conversa.numeroId, conversa.telefone))?.etapaOrigem === "manual";
-      const analise = {
-        resumo: resultado.resumo || null,
-        proximoPasso: resultado.proximoPasso || null,
-        analisadoEm: new Date(),
-        ultimaMensagemAnalisada: conversa.ultima,
-      };
-      const etapa = manual
-        ? {}
-        : {
-            etapa: resultado.etapa,
-            etapaOrigem: "ia" as const,
-            motivoPerda: resultado.motivoPerda,
-            motivoDetalhe: resultado.motivoPerda ? resultado.motivoDetalhe || null : null,
-          };
-
-      await db
-        .insert(funilClientes)
-        .values({ numeroId: conversa.numeroId, telefone: conversa.telefone, ...analise, ...etapa })
-        .onConflictDoUpdate({ target: [funilClientes.numeroId, funilClientes.telefone],  set: { ...analise, ...etapa } });
-
-      await db
-        .delete(duvidasIa)
-        .where(and(eq(duvidasIa.numeroId, conversa.numeroId), eq(duvidasIa.telefone, conversa.telefone)));
-      if (resultado.perguntas.length > 0) {
-        await db.insert(duvidasIa).values(
-          resultado.perguntas.map((pergunta) => ({
-            numeroId: conversa.numeroId,
-            telefone: conversa.telefone,
-            tema: pergunta.tema,
-            pergunta: pergunta.pergunta,
-            sanada: pergunta.sanada,
-            perguntadaEm: mensagens[pergunta.mensagem - 1]!.em,
-          })),
-        );
-        for (const { tema } of resultado.perguntas) if (!temas.includes(tema)) temas.push(tema);
-      }
       analisadas += 1;
     } catch (erro) {
       erros += 1;
@@ -226,6 +247,48 @@ export function createAnaliseConversasWorker(db: Db, analista: AnalistaConversas
       }
     },
     { connection: getRedisConnection(), concurrency: 1 },
+  );
+}
+
+// Funil ao vivo: analisa uma conversa só, pedida pela API pouco depois da última mensagem (do cliente ou
+// nossa). Se nada mudou desde a última análise (ou a conversa foi excluída), não gasta uma chamada à IA.
+async function analisarConversaAoVivo(db: Db, analista: AnalistaConversas, numeroId: number, telefone: string): Promise<void> {
+  const [[recebida], [enviada], [noFunil], [exclusao], [numero]] = await Promise.all([
+    db
+      .select({ ultima: max(respostasClientes.recebidaEm) })
+      .from(respostasClientes)
+      .where(and(eq(respostasClientes.numeroId, numeroId), eq(respostasClientes.telefone, telefone))),
+    db
+      .select({ ultima: max(mensagensSaida.createdAt) })
+      .from(mensagensSaida)
+      .where(and(eq(mensagensSaida.numeroId, numeroId), eq(mensagensSaida.telefone, telefone), eq(mensagensSaida.statusEnvio, "enviado"))),
+    db.select().from(funilClientes).where(and(eq(funilClientes.numeroId, numeroId), eq(funilClientes.telefone, telefone))),
+    db.select().from(conversasExcluidas).where(and(eq(conversasExcluidas.numeroId, numeroId), eq(conversasExcluidas.telefone, telefone))),
+    db.select({ unidadeId: numerosWhatsapp.unidadeId }).from(numerosWhatsapp).where(eq(numerosWhatsapp.id, numeroId)),
+  ]);
+  if (!recebida?.ultima || !numero) return;
+
+  const ultima = [recebida.ultima, enviada?.ultima].filter((data): data is Date => Boolean(data)).sort((a, b) => b.getTime() - a.getTime())[0]!;
+  if (exclusao && ultima.getTime() <= exclusao.excluidaEm.getTime()) return;
+  if (noFunil?.ultimaMensagemAnalisada && ultima.getTime() <= noFunil.ultimaMensagemAnalisada.getTime()) return;
+
+  const resultado = await analisarConversa(
+    db,
+    analista,
+    { numeroId, telefone, ultima },
+    await temasDeReferencia(db, numero.unidadeId),
+    noFunil?.etapaOrigem === "manual",
+  );
+  if (resultado && resultado !== "sem_cliente") {
+    console.log(`[funil] ${telefone} reanalisada ao vivo (${resultado.tokensEntrada} tokens de entrada, ${resultado.tokensSaida} de saída)`);
+  }
+}
+
+export function createAnaliseConversaWorker(db: Db, analista: AnalistaConversas): Worker<AnaliseConversaJobData> {
+  return new Worker<AnaliseConversaJobData>(
+    ANALISE_CONVERSA_QUEUE_NAME,
+    async (job) => analisarConversaAoVivo(db, analista, job.data.numeroId, job.data.telefone),
+    { connection: getRedisConnection(), concurrency: 2 },
   );
 }
 

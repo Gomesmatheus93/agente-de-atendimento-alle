@@ -223,11 +223,12 @@ No `.env` da raiz: `ANTHROPIC_API_KEY` (obrigatória para a IA funcionar; sem el
 - **A IA não vê mídia.** Foto, PDF e áudio não são gravados pelo webhook, então se o cliente mandar a fatura como arquivo a IA não fica sabendo. A base de conhecimento a instrui a pedir humano quando o cliente disser que enviou algo.
 - Se o cliente escrever **enquanto** a IA está gerando uma sugestão, a mensagem nova não dispara outra sugestão sozinha — use **Pedir sugestão agora**.
 
-## Funil de clientes e análise diária
+## Funil de clientes e análise por IA
 
 A tela **Funil de clientes** tem um card por cliente que respondeu, nas colunas *Em conversa → Interessado → Fechando → Fechou / Não fechou*. Os cards podem ser arrastados; ao soltar em *Não fechou*, a tela pede o motivo (preço, fidelidade, localização...).
 
 - **Análise diária (worker, `analise-conversas`):** todo dia às 3h (horário de Brasília) o worker lê, com o Claude, as conversas que tiveram mensagem nova desde a última análise e, para cada uma, posiciona o card, registra o motivo de não fechar, escreve um resumo e o próximo passo, e extrai as perguntas do cliente com um tema e se a conversa trouxe a resposta (`funil_clientes` e `duvidas_ia`). "Analisar agora" no Funil roda na hora. Até 200 conversas por rodada; o resto fica para a seguinte.
+- **Ao vivo (worker, `analise-conversa`):** cada mensagem do cliente e cada resposta enviada (bot ou equipe) pede a análise daquela conversa para **2 minutos depois**; mensagens novas nesse intervalo só empurram o horário, então uma conversa movimentada vira uma análise só, quando ela acalma. O card muda de coluna sozinho (a tela Funil atualiza a cada 30 s). Se nada mudou desde a última análise, não chama a IA.
 - **Card movido à mão não é mudado pela IA** (só o resumo é atualizado). "Devolver à IA" no card desfaz isso.
 - **Ranking de dúvidas:** a aba *Análise da IA* da tela Dúvidas soma os temas e mostra, em destaque, as perguntas que ficaram **sem resposta** — o que acrescentar à base de conhecimento do agente no n8n. A aba *Palavras-chave* é o ranking antigo, que não depende da IA.
 - **Precisa de `ANTHROPIC_API_KEY` no `.env` da raiz do projeto.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.

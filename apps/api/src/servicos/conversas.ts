@@ -25,7 +25,7 @@ import {
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gt, isNotNull, isNull, lte, max, sql, type SQL } from "drizzle-orm";
-import { getMensagemSaidaQueue } from "../queue.js";
+import { getMensagemSaidaQueue, pedirAnaliseDaConversa } from "../queue.js";
 
 const MAX_RESPOSTAS_NA_CONVERSA = 300;
 const MAX_ENVIOS_NA_CONVERSA = 100;
@@ -156,6 +156,8 @@ export async function enviarMensagem(
   }
 
   await marcarComoRespondida(db, input.telefone, input.numeroId);
+  // A resposta (do bot ou da equipe) pode ser o "matrícula registrada": o funil reavalia a conversa.
+  pedirAnaliseDaConversa(input.numeroId, input.telefone);
 
   if (input.sugestaoId) {
     await db

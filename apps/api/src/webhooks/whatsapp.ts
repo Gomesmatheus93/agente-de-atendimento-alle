@@ -25,7 +25,7 @@ import {
 } from "../config/plataforma.js";
 import { baixarMidia } from "../meta/graph.js";
 import { salvarBuffer } from "../media/armazenamento.js";
-import { pedirSugestaoIa } from "../queue.js";
+import { pedirAnaliseDaConversa, pedirSugestaoIa } from "../queue.js";
 import { getDb } from "../trpc/context.js";
 
 // Uma resposta só é atribuída a uma campanha se chegou até esse tempo depois do envio.
@@ -599,6 +599,7 @@ export function criarWebhookWhatsapp(): Router {
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
         await acionarAgenteSeLigado(db, telefone, mensagem.numeroId, mensagem.unidadeId, conteudo, nomePerfil);
+        pedirAnaliseDaConversa(mensagem.numeroId, telefone);
       }
       res.sendStatus(200);
     } catch (erro) {

@@ -5,7 +5,7 @@ import { createMensagemSaidaWorker } from "./queue/mensagem-saida-queue.js";
 import { createIaSugestaoWorker } from "./queue/ia-sugestao-queue.js";
 import { AgenteAtendimento } from "./ia/agenteAtendimento.js";
 import { AnalistaConversas } from "./ia/analistaConversas.js";
-import { agendarAnaliseDiaria, createAnaliseConversasWorker } from "./queue/analise-conversas-queue.js";
+import { agendarAnaliseDiaria, createAnaliseConversaWorker, createAnaliseConversasWorker } from "./queue/analise-conversas-queue.js";
 import { iniciarAgendadorDeCampanhas } from "./scheduler/campanhas-agendadas.js";
 import { FabricaDeProviders } from "./providers/whatsapp/fabrica.js";
 
@@ -26,7 +26,9 @@ const workers: Array<{ nome: string; worker: Worker }> = [
 const iaDisponivel = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 if (iaDisponivel) {
   workers.push({ nome: "ia-sugestao", worker: createIaSugestaoWorker(db, new AgenteAtendimento()) });
-  workers.push({ nome: "analise-conversas", worker: createAnaliseConversasWorker(db, new AnalistaConversas()) });
+  const analista = new AnalistaConversas();
+  workers.push({ nome: "analise-conversas", worker: createAnaliseConversasWorker(db, analista) });
+  workers.push({ nome: "analise-conversa", worker: createAnaliseConversaWorker(db, analista) });
 } else {
   console.warn("[ia] ANTHROPIC_API_KEY ausente: a IA de atendimento não vai sugerir respostas e a análise diária das conversas não roda.");
 }

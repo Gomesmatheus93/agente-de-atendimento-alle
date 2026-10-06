@@ -40,3 +40,19 @@ export function iaSugestaoJobId(telefone: string, numeroId: number): string {
 
 // Espera o cliente terminar de digitar antes de sugerir; quem pede pelo painel não espera.
 export const IA_SUGESTAO_ATRASO_MS = 20_000;
+
+// Análise de UMA conversa, logo depois que ela fica parada: é o que move o card do funil "ao vivo"
+// (a rodada diária continua cobrindo o resto). Cada mensagem nova reinicia a espera, então uma conversa
+// movimentada vira uma análise só, quando o cliente para de escrever — e não uma por mensagem.
+export const ANALISE_CONVERSA_QUEUE_NAME = "analise-conversa";
+export const ANALISE_CONVERSA_JOB_NAME = "analisar-conversa";
+export const ANALISE_CONVERSA_ATRASO_MS = 2 * 60_000;
+
+export interface AnaliseConversaJobData {
+  numeroId: number;
+  telefone: string;
+}
+
+export function analiseConversaJobId(numeroId: number, telefone: string): string {
+  return `analise-${numeroId}-${telefone}`;
+}
