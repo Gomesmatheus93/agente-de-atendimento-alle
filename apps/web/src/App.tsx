@@ -3,6 +3,7 @@ import { useRota } from "./lib/route.js";
 import { trpc } from "./lib/trpc.js";
 import { Login } from "./pages/Login.js";
 import { Campanhas } from "./pages/Campanhas.js";
+import { CampanhasInsights } from "./pages/CampanhasInsights.js";
 import { Configuracoes } from "./pages/Configuracoes.js";
 import { Usuarios } from "./pages/Usuarios.js";
 import { Unidades } from "./pages/Unidades.js";
@@ -90,6 +91,17 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
           ampla
         >
           <Campanhas campanhaId={rota.campanhaId} />
+        </Layout>
+      );
+    case "campanhas-insights":
+      return (
+        <Layout
+          telaAtiva="campanhas"
+          titulo="Campanhas"
+          descricao="Como cada campanha performa: do disparo à matrícula, quanto custou e o melhor horário para disparar."
+          ampla
+        >
+          <CampanhasInsights />
         </Layout>
       );
     case "calendario":

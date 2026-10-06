@@ -20,6 +20,7 @@ import {
 } from "../lib/format.js";
 import { hrefDe } from "../lib/route.js";
 import { trpc, type SaidaApi } from "../lib/trpc.js";
+import { AbasCampanhas } from "./CampanhasInsights.js";
 
 const INTERVALO_POLLING_MS = 2000;
 const INTERVALO_CHECKS_MS = 30_000;
@@ -111,6 +112,7 @@ export function Campanhas({ campanhaId }: { campanhaId: number | null }) {
   return (
     <div className="flex flex-col gap-8">
       <div className={`flex-col gap-3 ${campanhaId !== null ? "hidden lg:flex" : "flex"}`}>
+        <AbasCampanhas ativa="quadro" />
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <p className="flex items-center gap-2 text-xs text-ink-3">
             <Icone nome="arrastar" tamanho={14} />

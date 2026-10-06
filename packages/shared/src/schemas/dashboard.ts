@@ -42,3 +42,10 @@ export const resumoVisaoInputSchema = z
   });
 
 export type ResumoVisaoInput = z.infer<typeof resumoVisaoInputSchema>;
+
+// Insights das campanhas (tela Campanhas → Insights).
+export const PERIODOS_INSIGHTS = [7, 30, 90] as const;
+export type PeriodoInsights = (typeof PERIODOS_INSIGHTS)[number];
+export const insightsCampanhasInputSchema = z.object({
+  dias: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30),
+});

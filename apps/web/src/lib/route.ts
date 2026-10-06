@@ -4,6 +4,7 @@ export type Rota =
   | { tela: "visao-geral" }
   | { tela: "nova-campanha" }
   | { tela: "campanhas"; campanhaId: number | null }
+  | { tela: "campanhas-insights" }
   | { tela: "calendario" }
   | { tela: "funil" }
   // criarNaConta: formulário de novo template para aquela conta (#/templates/novo/<contaId>).
@@ -38,6 +39,7 @@ export function parseHash(hash: string): Rota {
   if (partes[0] === "usuarios") return { tela: "usuarios" };
   if (partes[0] === "unidades") return { tela: "unidades" };
 
+  if (partes[0] === "campanhas" && partes[1] === "insights") return { tela: "campanhas-insights" };
   if (partes[0] === "campanhas") {
     const id = Number(partes[1]);
     return { tela: "campanhas", campanhaId: Number.isInteger(id) && id > 0 ? id : null };
@@ -54,6 +56,8 @@ export function hrefDe(rota: Rota): string {
       return "#/nova-campanha";
     case "campanhas":
       return rota.campanhaId === null ? "#/campanhas" : `#/campanhas/${rota.campanhaId}`;
+    case "campanhas-insights":
+      return "#/campanhas/insights";
     case "calendario":
       return "#/calendario";
     case "funil":
