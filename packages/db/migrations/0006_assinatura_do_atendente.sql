@@ -1,0 +1,1 @@
+ALTER TABLE "usuarios" ADD COLUMN "assinatura" varchar(60);

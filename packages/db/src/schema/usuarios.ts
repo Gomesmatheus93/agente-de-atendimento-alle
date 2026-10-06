@@ -14,6 +14,8 @@ export const usuarios = pgTable("usuarios", {
   // Nulo só para o superadmin; todo o resto pertence a uma unidade e só enxerga os dados dela.
   unidadeId: integer("unidade_id").references(() => unidades.id, { onDelete: "cascade" }),
   ativo: boolean("ativo").notNull().default(true),
+  // Nome que o funcionário escolheu para assinar as respostas pelo painel ("*Nome*" na primeira linha).
+  assinatura: varchar("assinatura", { length: 60 }),
   // Check-in: disponível entra na fila de atendimento humano da unidade.
   disponivel: boolean("disponivel").notNull().default(false),
   disponivelDesde: timestamp("disponivel_desde", { withTimezone: true }),

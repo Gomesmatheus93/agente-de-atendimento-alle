@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { gerarHashDeSenha, senhaConfere, sessoes, unidades, usuarios } from "@atendimento-academias/db";
-import { criarPrimeiroUsuarioInputSchema, entrarInputSchema } from "@atendimento-academias/shared";
+import { criarPrimeiroUsuarioInputSchema, definirAssinaturaInputSchema, entrarInputSchema } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import { asc, count, eq, lt } from "drizzle-orm";
 import { COOKIE_SESSAO, tokenDaSessao, type Context } from "../context.js";
@@ -87,6 +87,12 @@ export const authRouter = router({
 
     await abrirSessao(ctx, usuario.id, unidadeDaSessao);
     return { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel };
+  }),
+
+  // O próprio funcionário escolhe como assina as respostas (vale em qualquer computador em que entrar).
+  definirAssinatura: procedimentoAutenticado.input(definirAssinaturaInputSchema).mutation(async ({ ctx, input }) => {
+    await ctx.db.update(usuarios).set({ assinatura: input.assinatura }).where(eq(usuarios.id, ctx.usuario.id));
+    return { assinatura: input.assinatura };
   }),
 
   sair: procedimentoAutenticado.mutation(async ({ ctx }) => {

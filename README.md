@@ -258,6 +258,15 @@ Quando um cliente pede uma pessoa, ou o bot não sabe responder, a conversa entr
 - **Devolver para a fila:** tira o cliente de quem estava atendendo, sem ele perder a vez.
 - Funcionário desativado ou removido: os clientes dele voltam para a fila.
 
+**Assinatura do atendente:** toda resposta enviada pelo painel sai com o nome do funcionário em negrito na primeira linha, como no WhatsApp:
+
+```
+*Ana*
+Olá! Posso ajudar com os planos?
+```
+
+O funcionário escolhe o nome no próprio chat antes de responder (fica salvo no usuário dele; "Trocar nome" muda). Sem nome escolhido o envio fica travado. As respostas do bot (n8n) e as notas de voz não levam assinatura.
+
 A tela **Fila de atendimento** mostra a equipe (disponível, ocupado com quem, ausente, posição na fila) e os clientes esperando.
 
 ## Fora de escopo por enquanto

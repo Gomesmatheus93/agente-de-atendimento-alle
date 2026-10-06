@@ -27,6 +27,8 @@ export interface UsuarioDaSessao {
   unidadeId: number | null;
   unidadeNome: string | null;
   disponivel: boolean;
+  // Nome em negrito nas respostas pelo painel; null = ainda não escolheu (o chat pede antes de enviar).
+  assinatura: string | null;
 }
 
 function lerCookie(cabecalho: string | undefined, nome: string): string | null {
@@ -54,6 +56,7 @@ async function usuarioDaRequisicao(db: Db, token: string | null): Promise<Usuari
       email: usuarios.email,
       papel: usuarios.papel,
       disponivel: usuarios.disponivel,
+      assinatura: usuarios.assinatura,
       propria: { id: unidadeDaPessoa.id, nome: unidadeDaPessoa.nome, ativo: unidadeDaPessoa.ativo },
       escolhida: { id: unidadeDaSessao.id, nome: unidadeDaSessao.nome },
     })
@@ -64,7 +67,14 @@ async function usuarioDaRequisicao(db: Db, token: string | null): Promise<Usuari
     .where(and(eq(sessoes.token, token), gt(sessoes.expiraEm, new Date()), eq(usuarios.ativo, true)));
   if (!linha) return null;
 
-  const base = { id: linha.id, nome: linha.nome, email: linha.email, papel: linha.papel, disponivel: linha.disponivel };
+  const base = {
+    id: linha.id,
+    nome: linha.nome,
+    email: linha.email,
+    papel: linha.papel,
+    disponivel: linha.disponivel,
+    assinatura: linha.assinatura,
+  };
   // O superadmin não tem unidade própria: trabalha na que escolheu nesta sessão.
   if (linha.papel === "superadmin") {
     return { ...base, unidadeId: linha.escolhida?.id ?? null, unidadeNome: linha.escolhida?.nome ?? null };

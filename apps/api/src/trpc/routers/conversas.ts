@@ -27,6 +27,8 @@ import {
   listarConversasInputSchema,
   preencherTemplate,
   reenviarRespostaInputSchema,
+  assinarMensagem,
+  TAMANHO_MAX_RESPOSTA,
   type TipoMensagem,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
@@ -313,9 +315,19 @@ export const conversasRouter = router({
 
   // A resposta é gravada como pendente e enviada em segundo plano pelo worker; a tela acompanha o status.
   // Quem responde à mão uma conversa sem atendente passa a ser o atendente dela (fica ocupado na fila).
+  // Toda resposta pelo painel sai assinada ("*Nome*" na primeira linha): o cliente sabe com quem fala e a
+  // conversa registra quem respondeu. Sem assinatura escolhida, não envia.
   enviarResposta: procedimentoUnidade.input(enviarRespostaInputSchema).mutation(async ({ ctx, input }) => {
     await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
-    return enviarMensagem(ctx.db, input, ctx.usuario.id);
+    const assinatura = ctx.usuario.assinatura?.trim();
+    if (!assinatura) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Coloque seu nome no chat antes de responder." });
+    }
+    const texto = assinarMensagem(assinatura, input.texto);
+    if (texto.length > TAMANHO_MAX_RESPOSTA) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Com o seu nome, a mensagem passa de ${TAMANHO_MAX_RESPOSTA} caracteres. Encurte um pouco.` });
+    }
+    return enviarMensagem(ctx.db, { ...input, texto }, ctx.usuario.id);
   }),
 
   // Nota de voz gravada no painel: grava o arquivo em disco e enfileira igual a uma resposta de texto.

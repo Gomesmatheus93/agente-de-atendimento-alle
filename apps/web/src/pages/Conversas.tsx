@@ -1,6 +1,6 @@
-import { JANELA_RESPOSTA_MS, TAMANHO_MAX_RESPOSTA } from "@atendimento-academias/shared";
+import { JANELA_RESPOSTA_MS, TAMANHO_MAX_ASSINATURA, TAMANHO_MAX_RESPOSTA } from "@atendimento-academias/shared";
 import { keepPreviousData } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
 import { Icone } from "../components/ui/Icone.js";
@@ -666,7 +666,7 @@ function Balao({
             ) : (
               <p className="text-sm text-ink-3">Imagem indisponível</p>
             )}
-            {mensagem.texto && <p className="whitespace-pre-wrap break-words text-ink">{mensagem.texto}</p>}
+            {mensagem.texto && <p className="whitespace-pre-wrap break-words text-ink">{comNegrito(mensagem.texto)}</p>}
           </div>
         ) : figurinha ? (
           mensagem.midiaUrl ? (
@@ -675,7 +675,7 @@ function Balao({
             <p className="text-sm text-ink-3">Figurinha indisponível</p>
           )
         ) : (
-          <p className="whitespace-pre-wrap break-words text-ink">{mensagem.texto}</p>
+          <p className="whitespace-pre-wrap break-words text-ink">{comNegrito(mensagem.texto)}</p>
         )}
       </div>
 
@@ -747,6 +747,93 @@ function blobParaBase64(blob: Blob): Promise<string> {
     leitor.onerror = () => reject(leitor.error as Error);
     leitor.readAsDataURL(blob);
   });
+}
+
+// O WhatsApp mostra *texto* em negrito (é assim que vai a assinatura do atendente); aqui fica igual.
+function comNegrito(texto: string): ReactNode[] {
+  return texto.split(/(\*[^*\n]+\*)/g).map((parte, indice) =>
+    /^\*[^*\n]+\*$/.test(parte) ? <strong key={indice}>{parte.slice(1, -1)}</strong> : parte,
+  );
+}
+
+// Nome do funcionário nas respostas: escolhido uma vez (fica salvo no usuário) e trocável a qualquer momento.
+// Sem ele o envio fica travado — toda resposta pelo painel sai assinada.
+function useAssinatura() {
+  return trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.assinatura ?? null;
+}
+
+function Assinatura({ assinatura }: { assinatura: string | null }) {
+  const utils = trpc.useUtils();
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(assinatura ?? "");
+  const salvar = trpc.auth.definirAssinatura.useMutation({
+    onSuccess: () => {
+      setEditando(false);
+      void utils.auth.estado.invalidate();
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+
+  if (assinatura && !editando) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-2 text-xs text-ink-2">
+        <span>
+          Assinando como <strong className="text-ink">*{assinatura}*</strong>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setNome(assinatura);
+            setEditando(true);
+          }}
+          className="font-semibold text-accent-text hover:underline"
+        >
+          Trocar nome
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(evento) => {
+        evento.preventDefault();
+        if (nome.trim()) salvar.mutate({ assinatura: nome });
+      }}
+      className="flex flex-col gap-1.5 rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2.5"
+    >
+      <label htmlFor="assinatura-atendente" className="text-xs font-semibold text-ink">
+        Seu nome no atendimento
+        <span className="block font-normal text-ink-2">
+          Vai em negrito no topo de cada mensagem que você enviar, para o cliente saber com quem está falando.
+        </span>
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id="assinatura-atendente"
+          value={nome}
+          onChange={(evento) => setNome(evento.target.value.replace(/[*_~\n\r]/g, ""))}
+          maxLength={TAMANHO_MAX_ASSINATURA}
+          placeholder="Ex.: Ana"
+          autoFocus={!assinatura}
+          className="min-w-40 flex-1 rounded-lg px-3 py-1.5 text-sm"
+        />
+        <Button type="submit" disabled={!nome.trim() || salvar.isPending} className="h-8 shrink-0 px-3 text-xs">
+          {salvar.isPending ? "Salvando…" : "Salvar"}
+        </Button>
+        {assinatura && (
+          <Button type="button" variante="fantasma" onClick={() => setEditando(false)} className="h-8 shrink-0 px-3 text-xs">
+            Cancelar
+          </Button>
+        )}
+      </div>
+      {nome.trim() && (
+        <p className="text-[11px] text-ink-3">
+          O cliente vê: <strong className="text-ink-2">{nome.trim()}</strong> e, na linha de baixo, a sua mensagem.
+        </p>
+      )}
+    </form>
+  );
 }
 
 interface CompositorProps {
@@ -864,6 +951,7 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
     }
   }
 
+  const assinatura = useAssinatura();
   const restante = expiraEm ? new Date(expiraEm).getTime() - agora : 0;
 
   if (restante <= 0) {
@@ -881,7 +969,9 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
     );
   }
 
-  const podeEnviar = texto.trim() !== "" && !enviar.isPending;
+  // A assinatura ("*Nome*" + quebra de linha) ocupa parte do limite de caracteres do WhatsApp.
+  const maximo = TAMANHO_MAX_RESPOSTA - (assinatura ? assinatura.length + 3 : 0);
+  const podeEnviar = Boolean(assinatura) && texto.trim() !== "" && texto.length <= maximo && !enviar.isPending;
 
   function enviarAgora() {
     if (podeEnviar) enviar.mutate({ telefone, numeroId, texto, sugestaoId: sugestaoId ?? undefined });
@@ -895,11 +985,12 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
     }
   }
 
-  const perto = texto.length > TAMANHO_MAX_RESPOSTA * 0.9;
+  const perto = texto.length > maximo * 0.9;
 
   return (
     <footer className="border-t border-card-border bg-surface p-3 sm:p-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        <Assinatura key={assinatura ?? ""} assinatura={assinatura} />
         {gravando ? (
           <div className="flex h-10 items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3">
             <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-status-falhou" />
@@ -933,9 +1024,10 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
               }}
               onKeyDown={aoTeclar}
               rows={Math.min(6, Math.max(1, texto.split("\n").length))}
-              maxLength={TAMANHO_MAX_RESPOSTA}
+              maxLength={maximo}
+              disabled={!assinatura}
               aria-label="Escreva uma resposta"
-              placeholder="Escreva uma resposta…"
+              placeholder={assinatura ? "Escreva uma resposta…" : "Coloque seu nome acima para responder"}
               className="min-h-10 flex-1 resize-none px-3 py-2 text-sm"
             />
             {texto.trim() === "" && (
@@ -965,7 +1057,7 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
             </span>
             <span className={perto ? "font-semibold text-amber-800" : ""}>
               {perto
-                ? `${formatarNumero(texto.length)}/${formatarNumero(TAMANHO_MAX_RESPOSTA)} caracteres`
+                ? `${formatarNumero(texto.length)}/${formatarNumero(maximo)} caracteres`
                 : `Você pode responder por mais ${formatarDuracao(restante)}`}
             </span>
           </p>
@@ -1032,6 +1124,7 @@ interface CartaoDaSugestaoProps {
 }
 
 function CartaoDaSugestao({ telefone, numeroId, sugestao, pedindo, onPedir, onEditar, onMudou }: CartaoDaSugestaoProps) {
+  const assinatura = useAssinatura();
   const enviar = trpc.conversas.enviarResposta.useMutation({
     onSuccess: onMudou,
     onError: (erro) => toast.erro(mensagemDeErro(erro)),
@@ -1078,7 +1171,8 @@ function CartaoDaSugestao({ telefone, numeroId, sugestao, pedindo, onPedir, onEd
           </Button>
           <Button
             onClick={() => enviar.mutate({ telefone, numeroId, texto: sugestao.texto, sugestaoId: sugestao.id })}
-            disabled={ocupado}
+            disabled={ocupado || !assinatura}
+            title={assinatura ? `Sai assinada como ${assinatura}` : "Coloque seu nome no chat para enviar"}
             className="px-3 py-1.5 text-xs"
           >
             <Icone nome="enviar" tamanho={13} />

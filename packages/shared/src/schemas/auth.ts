@@ -79,6 +79,24 @@ export const entrarNaUnidadeInputSchema = z.object({
   id: z.number().int().positive().nullable(),
 });
 
+// Assinatura do funcionário nas respostas pelo painel: o nome vai em negrito na primeira linha, para o
+// cliente saber com quem fala e a equipe saber quem respondeu o quê. Sem asterisco nem quebra de linha,
+// que quebrariam o negrito do WhatsApp.
+export const TAMANHO_MAX_ASSINATURA = 60;
+export const definirAssinaturaInputSchema = z.object({
+  assinatura: z
+    .string()
+    .trim()
+    .min(1, "Escreva seu nome")
+    .max(TAMANHO_MAX_ASSINATURA, `Use no máximo ${TAMANHO_MAX_ASSINATURA} caracteres`)
+    .regex(/^[^*_~\n\r]+$/, "Use só letras, números e espaços"),
+});
+
+// "*Nome*\nmensagem": é assim que a mensagem chega no WhatsApp do cliente.
+export function assinarMensagem(assinatura: string, texto: string): string {
+  return `*${assinatura}*\n${texto}`;
+}
+
 // Check-in do funcionário: disponível entra na fila de atendimento humano.
 export const definirDisponivelInputSchema = z.object({
   disponivel: z.boolean(),
