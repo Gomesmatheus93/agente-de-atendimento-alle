@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { hrefDe, type Rota } from "../lib/route.js";
 import { useTema } from "../lib/tema.js";
 import { trpc } from "../lib/trpc.js";
-import { pedidoRelevante, usePedidosDeHumano } from "./AvisosDeHumano.js";
+import { usePedidosDeHumano } from "./AvisosDeHumano.js";
 import { Icone, type NomeIcone } from "./ui/Icone.js";
 
 type Tela = Rota["tela"];
@@ -24,7 +24,6 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
     itens: [
       { tela: "visao-geral", label: "Visão geral", href: hrefDe({ tela: "visao-geral" }), icone: "painel" },
       { tela: "conversas", label: "Conversas", href: hrefDe({ tela: "conversas", telefone: null, numeroId: null }), icone: "mensagem" },
-      { tela: "fila", label: "Fila de atendimento", href: hrefDe({ tela: "fila" }), icone: "fone" },
       { tela: "funil", label: "Funil de clientes", href: hrefDe({ tela: "funil" }), icone: "funil" },
       { tela: "campanhas", label: "Campanhas", href: hrefDe({ tela: "campanhas", campanhaId: null }), icone: "kanban" },
       { tela: "calendario", label: "Calendário", href: hrefDe({ tela: "calendario" }), icone: "calendario" },
@@ -68,8 +67,7 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
     trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0;
   const ehSuperadmin = papel === "superadmin";
   const ehAdmin = papel === "admin" || ehSuperadmin;
-  // Só o que cabe a esta pessoa: clientes esperando alguém e os que a fila mandou para ela.
-  const precisamDeHumano = (usePedidosDeHumano().data ?? []).filter(pedidoRelevante).length;
+  const precisamDeHumano = usePedidosDeHumano().data?.length ?? 0;
 
   // Sem unidade escolhida, o superadmin só tem a tela Unidades.
   const grupos = GRUPOS.map((grupo) => ({
@@ -191,51 +189,6 @@ function SeletorDeUnidade() {
         ))}
       </select>
     </label>
-  );
-}
-
-// Check-in da fila: o funcionário marca que está disponível para receber clientes que pediram uma pessoa.
-// Enquanto estiver com um atendimento aberto, aparece como ocupado e a fila passa a vez para outro.
-function CheckIn() {
-  const utils = trpc.useUtils();
-  const usuario = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario;
-  const fila = trpc.fila.estado.useQuery(undefined, { enabled: Boolean(usuario?.unidadeId), refetchInterval: 10_000 });
-  const definir = trpc.fila.definirDisponivel.useMutation({
-    onSuccess: () => {
-      void utils.fila.estado.invalidate();
-      void utils.conversas.pedidosDeHumano.invalidate();
-    },
-  });
-
-  // O superadmin não entra na fila de nenhuma unidade.
-  const eu = fila.data?.atendentes.find((pessoa) => pessoa.souEu);
-  if (!usuario?.unidadeId || usuario.papel === "superadmin" || !eu) return null;
-
-  const estilo = {
-    disponivel: { rotulo: "Disponível", ponto: "bg-emerald-400", detalhe: eu.posicaoNaFila ? `${eu.posicaoNaFila}º da fila` : "na fila" },
-    ocupado: { rotulo: "Ocupado", ponto: "bg-amber-400", detalhe: `atendendo ${eu.atendendo.length}` },
-    ausente: { rotulo: "Ausente", ponto: "bg-slate-400", detalhe: "fora da fila" },
-  }[eu.situacao];
-  const naFila = eu.situacao !== "ausente";
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2">
-      <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${estilo.ponto}`} />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[12px] font-semibold text-sidebar-ink">{estilo.rotulo}</span>
-        <span className="block truncate text-[10px] text-sidebar-ink-2">{estilo.detalhe}</span>
-      </span>
-      <button
-        type="button"
-        onClick={() => definir.mutate({ disponivel: !naFila })}
-        disabled={definir.isPending}
-        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50 ${
-          naFila ? "bg-white/10 text-sidebar-ink hover:bg-white/15" : "bg-brand-2 text-brand-2-contrast hover:opacity-90"
-        }`}
-      >
-        {naFila ? "Sair da fila" : "Fazer check-in"}
-      </button>
-    </div>
   );
 }
 
@@ -361,7 +314,6 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
           <div className="sem-barra min-h-0 flex-1 overflow-y-auto">
             <Menu telaAtiva={telaAtiva} />
           </div>
-          <CheckIn />
           <Rodape />
         </aside>
       )}
@@ -395,7 +347,6 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
             <div className="min-h-0 flex-1">
               <Menu telaAtiva={telaAtiva} onNavegar={() => setMenuAberto(false)} />
             </div>
-            <CheckIn />
             <Rodape />
           </div>
         </div>

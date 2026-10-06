@@ -6,7 +6,6 @@ import { configuracoesRouter } from "./routers/configuracoes.js";
 import { conversasRouter } from "./routers/conversas.js";
 import { dashboardRouter } from "./routers/dashboard.js";
 import { duvidasRouter } from "./routers/duvidas.js";
-import { filaRouter } from "./routers/fila.js";
 import { funilRouter } from "./routers/funil.js";
 import { relatoriosRouter } from "./routers/relatorios.js";
 import { templatesRouter } from "./routers/templates.js";
@@ -21,7 +20,6 @@ export const appRouter = router({
   conversas: conversasRouter,
   dashboard: dashboardRouter,
   duvidas: duvidasRouter,
-  fila: filaRouter,
   funil: funilRouter,
   relatorios: relatoriosRouter,
   templates: templatesRouter,

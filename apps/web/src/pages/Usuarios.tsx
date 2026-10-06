@@ -24,9 +24,8 @@ export function Usuarios() {
       <Card>
         <h3 className="font-heading text-base font-bold">Equipe da unidade</h3>
         <p className="mt-1 text-sm text-ink-2">
-          O administrador cuida das configurações e da equipe; os funcionários atendem as conversas e entram na fila de
-          atendimento pelo check-in. Desativar ou trocar a senha derruba as sessões abertas da pessoa na hora, e os
-          clientes que estavam com ela voltam para a fila.
+          O administrador cuida das configurações e da equipe; os funcionários atendem as conversas. Desativar ou trocar
+          a senha derruba as sessões abertas da pessoa na hora.
         </p>
 
         <ul className="mt-4 flex flex-col divide-y divide-card-border border-y border-card-border">

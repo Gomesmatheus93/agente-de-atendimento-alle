@@ -12,13 +12,9 @@ export const INTERVALO_PEDIDOS_MS = 10_000;
 const CHAVE_DISPENSADOS = "avisos-humano-dispensados";
 const MAX_VISIVEIS = 3;
 
-// Um pedido é a conversa + o momento em que passou a precisar de humano + quem a fila escolheu: se for
-// resolvido e pedir de novo, ou se a fila passar para outra pessoa, é outro aviso.
-const chaveDe = (pedido: Pedido) => `${pedido.numeroId}:${pedido.telefone}:${pedido.desde}:${pedido.atendente?.id ?? 0}`;
-
-// O que cabe a quem está olhando: clientes que a fila mandou para essa pessoa, e os que estão esperando
-// porque ninguém está livre. Os que já estão com outro atendente não precisam de aviso.
-export const pedidoRelevante = (pedido: Pedido) => pedido.paraMim || !pedido.atendente;
+// Um pedido é a conversa + o momento em que passou a precisar de humano: se for resolvido e pedir de
+// novo, é outro aviso.
+const chaveDe = (pedido: Pedido) => `${pedido.numeroId}:${pedido.telefone}:${pedido.desde}`;
 const nomeDe = (pedido: Pedido) => pedido.nome ?? formatarTelefone(pedido.telefone);
 
 export function usePedidosDeHumano() {
@@ -65,24 +61,23 @@ export function AvisosDeHumano() {
   // Pedidos já vistos nesta aba: só os novos tocam o som e geram notificação do navegador.
   const conhecidos = useRef<Set<string> | null>(null);
 
-  const relevantes = pedidos.filter(pedidoRelevante);
-  const visiveis = relevantes.filter((pedido) => !dispensados.has(chaveDe(pedido)));
+  const visiveis = pedidos.filter((pedido) => !dispensados.has(chaveDe(pedido)));
 
   useEffect(() => {
-    const atuais = new Set(relevantes.map(chaveDe));
+    const atuais = new Set(pedidos.map(chaveDe));
     if (conhecidos.current === null) {
       // Primeira carga: o que já estava pendente aparece, mas sem alarde.
       conhecidos.current = atuais;
       return;
     }
-    const novos = relevantes.filter((pedido) => !conhecidos.current!.has(chaveDe(pedido)) && !dispensados.has(chaveDe(pedido)));
+    const novos = pedidos.filter((pedido) => !conhecidos.current!.has(chaveDe(pedido)) && !dispensados.has(chaveDe(pedido)));
     conhecidos.current = atuais;
     if (novos.length === 0) return;
 
     tocarAviso();
     if ("Notification" in window && Notification.permission === "granted") {
       for (const pedido of novos) {
-        const notificacao = new Notification(pedido.paraMim ? `${nomeDe(pedido)} foi encaminhado para você` : `${nomeDe(pedido)} precisa de ajuda`, {
+        const notificacao = new Notification(`${nomeDe(pedido)} precisa de ajuda`, {
           body: pedido.motivo ?? "O cliente está esperando uma pessoa da equipe.",
           tag: chaveDe(pedido),
         });
@@ -92,13 +87,12 @@ export function AvisosDeHumano() {
         };
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- relevantes deriva de pedidos
   }, [pedidos, dispensados]);
 
   function dispensar(pedido: Pedido) {
     setDispensados((atual) => {
       // Guarda só os que ainda estão pendentes: a lista não cresce para sempre.
-      const pendentes = new Set(relevantes.map(chaveDe));
+      const pendentes = new Set(pedidos.map(chaveDe));
       const proximo = new Set([...atual].filter((chave) => pendentes.has(chave)));
       proximo.add(chaveDe(pedido));
       try {
@@ -125,13 +119,11 @@ export function AvisosDeHumano() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-ink">
-              {nomeDe(pedido)}{" "}
-              <span className="font-normal text-ink-2">{pedido.paraMim ? "foi encaminhado para você" : "precisa de ajuda"}</span>
+              {nomeDe(pedido)} <span className="font-normal text-ink-2">precisa de ajuda</span>
             </p>
             <p className="mt-0.5 line-clamp-2 text-xs text-ink-2">{pedido.motivo ?? "O cliente está esperando uma pessoa da equipe."}</p>
             <p className="mt-0.5 text-[11px] text-ink-3">
               esperando {tempoRelativo(pedido.desde)}
-              {!pedido.atendente && " · ninguém livre na fila"}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <a

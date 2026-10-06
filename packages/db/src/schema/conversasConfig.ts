@@ -1,6 +1,5 @@
-import { boolean, index, integer, pgTable, primaryKey, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, timestamp, varchar } from "drizzle-orm/pg-core";
 import { timestamps } from "./columns.js";
-import { usuarios } from "./usuarios.js";
 import { numerosWhatsapp } from "./whatsapp.js";
 
 // Preferências de cada conversa — o par número da operação + telefone do cliente. A conversa em si não é
@@ -21,13 +20,9 @@ export const conversasConfig = pgTable(
     motivoHumano: varchar("motivo_humano", { length: 500 }),
     // Quando passou a precisar de humano: ordena os avisos do painel e identifica um pedido novo.
     humanoPedidoEm: timestamp("humano_pedido_em", { withTimezone: true }),
-    // Funcionário com o atendimento aberto (recebido da fila, ou que respondeu à mão). Enquanto houver um,
-    // o bot não responde e o funcionário fica "ocupado" na fila; "Encerrar atendimento" limpa.
-    atendenteId: integer("atendente_id").references(() => usuarios.id, { onDelete: "set null" }),
-    atendimentoDesde: timestamp("atendimento_desde", { withTimezone: true }),
     ...timestamps(),
   },
-  (tabela) => [primaryKey({ columns: [tabela.numeroId, tabela.telefone] }), index("conversas_config_atendente").on(tabela.atendenteId)],
+  (tabela) => [primaryKey({ columns: [tabela.numeroId, tabela.telefone] })],
 );
 
 // "Excluir conversa" (tela Conversas): tudo o que aconteceu até excluidaEm some de Conversas, do Funil e do

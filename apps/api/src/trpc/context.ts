@@ -26,7 +26,6 @@ export interface UsuarioDaSessao {
   // Unidade em que a pessoa está trabalhando: a dela, ou a que o superadmin escolheu (null = nenhuma).
   unidadeId: number | null;
   unidadeNome: string | null;
-  disponivel: boolean;
   // Nome em negrito nas respostas pelo painel; null = ainda não escolheu (o chat pede antes de enviar).
   assinatura: string | null;
 }
@@ -55,7 +54,6 @@ async function usuarioDaRequisicao(db: Db, token: string | null): Promise<Usuari
       nome: usuarios.nome,
       email: usuarios.email,
       papel: usuarios.papel,
-      disponivel: usuarios.disponivel,
       assinatura: usuarios.assinatura,
       propria: { id: unidadeDaPessoa.id, nome: unidadeDaPessoa.nome, ativo: unidadeDaPessoa.ativo },
       escolhida: { id: unidadeDaSessao.id, nome: unidadeDaSessao.nome },
@@ -72,7 +70,6 @@ async function usuarioDaRequisicao(db: Db, token: string | null): Promise<Usuari
     nome: linha.nome,
     email: linha.email,
     papel: linha.papel,
-    disponivel: linha.disponivel,
     assinatura: linha.assinatura,
   };
   // O superadmin não tem unidade própria: trabalha na que escolheu nesta sessão.

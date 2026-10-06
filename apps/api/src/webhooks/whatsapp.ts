@@ -158,9 +158,8 @@ async function registrarContato(db: Db, telefone: string, nomePerfil: string): P
 }
 
 // A IA liga sozinha quando um cliente nosso escreve, para o atendimento seguir sem esperar a equipe. Ela
-// só fica parada quando: alguém da equipe desligou à mão nesta conversa (iaDesligadaManual), o cliente
-// pediu uma pessoa / o bot não soube responder (precisaHumano), ou um funcionário está com o atendimento
-// aberto (atendenteId) — até "Encerrar atendimento".
+// só fica parada quando: alguém da equipe desligou à mão nesta conversa (iaDesligadaManual), ou o cliente
+// pediu uma pessoa / o bot não soube responder (precisaHumano — até "Encerrar atendimento").
 async function acionarAgenteSeLigado(
   db: Db,
   telefone: string,
@@ -174,7 +173,6 @@ async function acionarAgenteSeLigado(
       iaAtiva: conversasConfig.iaAtiva,
       iaDesligadaManual: conversasConfig.iaDesligadaManual,
       precisaHumano: conversasConfig.precisaHumano,
-      atendenteId: conversasConfig.atendenteId,
     })
     .from(conversasConfig)
     .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
@@ -188,7 +186,7 @@ async function acionarAgenteSeLigado(
       .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
   }
 
-  if (existente?.iaDesligadaManual || existente?.precisaHumano || existente?.atendenteId) return;
+  if (existente?.iaDesligadaManual || existente?.precisaHumano) return;
 
   const { modo, webhookN8nUrl } = await configuracaoDoAgente(db, unidadeId);
 

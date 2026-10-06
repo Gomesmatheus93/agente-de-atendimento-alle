@@ -96,8 +96,3 @@ export const definirAssinaturaInputSchema = z.object({
 export function assinarMensagem(assinatura: string, texto: string): string {
   return `*${assinatura}*\n${texto}`;
 }
-
-// Check-in do funcionário: disponível entra na fila de atendimento humano.
-export const definirDisponivelInputSchema = z.object({
-  disponivel: z.boolean(),
-});

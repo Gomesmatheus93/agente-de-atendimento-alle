@@ -179,12 +179,6 @@ const ICONES = {
       <circle cx="15" cy="18" r="1" />
     </>
   ),
-  fone: (
-    <>
-      <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
-      <path d="M21 15a2 2 0 0 1-2 2h-1v-6h1a2 2 0 0 1 2 2ZM3 15a2 2 0 0 0 2 2h1v-6H5a2 2 0 0 0-2 2Z" />
-    </>
-  ),
   predio: (
     <>
       <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />

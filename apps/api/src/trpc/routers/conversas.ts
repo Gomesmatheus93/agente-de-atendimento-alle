@@ -9,11 +9,7 @@ import {
   sugestoesIa,
   templatesWhatsapp,
   conversasExcluidas,
-  assumirAtendimento,
-  devolverParaFila,
   doNumeroDaUnidade,
-  encerrarAtendimento,
-  usuarios,
 } from "@atendimento-academias/db";
 import {
   definirIaInputSchema,
@@ -223,10 +219,8 @@ export const conversasRouter = router({
           numeroId: conversasConfig.numeroId,
           iaAtiva: conversasConfig.iaAtiva,
           precisaHumano: conversasConfig.precisaHumano,
-          atendenteNome: usuarios.nome,
         })
         .from(conversasConfig)
-        .leftJoin(usuarios, eq(usuarios.id, conversasConfig.atendenteId))
         .where(and(inArray(conversasConfig.telefone, telefones), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId))),
       ctx.db
         .select({ telefone: contatos.telefone, nomePerfil: contatos.nomePerfil })
@@ -291,7 +285,6 @@ export const conversasRouter = router({
         ultimaMensagem: previa,
         iaAtiva: configPorConversa.get(chave)?.iaAtiva ?? false,
         precisaHumano: configPorConversa.get(chave)?.precisaHumano ?? false,
-        atendenteNome: configPorConversa.get(chave)?.atendenteNome ?? null,
         ultimaEm: ultimaEm.toISOString(),
         naoLidas: Number(contagem?.naoLidas ?? 0),
         total: Number(contagem?.total ?? 0),
@@ -314,7 +307,6 @@ export const conversasRouter = router({
   }),
 
   // A resposta é gravada como pendente e enviada em segundo plano pelo worker; a tela acompanha o status.
-  // Quem responde à mão uma conversa sem atendente passa a ser o atendente dela (fica ocupado na fila).
   // Toda resposta pelo painel sai assinada ("*Nome*" na primeira linha): o cliente sabe com quem fala e a
   // conversa registra quem respondeu. Sem assinatura escolhida, não envia.
   enviarResposta: procedimentoUnidade.input(enviarRespostaInputSchema).mutation(async ({ ctx, input }) => {
@@ -327,7 +319,7 @@ export const conversasRouter = router({
     if (texto.length > TAMANHO_MAX_RESPOSTA) {
       throw new TRPCError({ code: "BAD_REQUEST", message: `Com o seu nome, a mensagem passa de ${TAMANHO_MAX_RESPOSTA} caracteres. Encurte um pouco.` });
     }
-    return enviarMensagem(ctx.db, { ...input, texto }, ctx.usuario.id);
+    return enviarMensagem(ctx.db, { ...input, texto });
   }),
 
   // Nota de voz gravada no painel: grava o arquivo em disco e enfileira igual a uma resposta de texto.
@@ -351,7 +343,6 @@ export const conversasRouter = router({
 
     await enfileirarResposta(ctx.db, id, 1);
     await marcarComoRespondida(ctx.db, input.telefone, input.numeroId);
-    await assumirAtendimento(ctx.db, input.telefone, input.numeroId, ctx.usuario.id);
 
     return { id };
   }),
@@ -415,7 +406,7 @@ export const conversasRouter = router({
   }),
 
   // Conversas esperando uma pessoa (o cliente pediu ou o bot não soube responder): alimenta o aviso que
-  // aparece em qualquer tela do painel, com quem da fila ficou com cada uma. O mais antigo primeiro.
+  // aparece em qualquer tela do painel. O mais antigo primeiro — é quem está esperando há mais tempo.
   pedidosDeHumano: procedimentoUnidade.query(async ({ ctx }) => {
     const pedidos = await ctx.db
       .select({
@@ -424,11 +415,8 @@ export const conversasRouter = router({
         motivo: conversasConfig.motivoHumano,
         desde: conversasConfig.humanoPedidoEm,
         atualizadoEm: conversasConfig.updatedAt,
-        atendenteId: conversasConfig.atendenteId,
-        atendenteNome: usuarios.nome,
       })
       .from(conversasConfig)
-      .leftJoin(usuarios, eq(usuarios.id, conversasConfig.atendenteId))
       .where(and(eq(conversasConfig.precisaHumano, true), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId)))
       .limit(50);
     if (pedidos.length === 0) return [];
@@ -445,25 +433,19 @@ export const conversasRouter = router({
         numeroId: pedido.numeroId,
         nome: nomePorTelefone.get(pedido.telefone) ?? null,
         motivo: pedido.motivo,
-        atendente: pedido.atendenteId && pedido.atendenteNome ? { id: pedido.atendenteId, nome: pedido.atendenteNome } : null,
-        paraMim: pedido.atendenteId === ctx.usuario.id,
         // Pedidos de antes deste campo existir usam a última alteração da conversa.
         desde: (pedido.desde ?? pedido.atualizadoEm).toISOString(),
       }))
       .sort((a, b) => a.desde.localeCompare(b.desde));
   }),
 
-  // "Encerrar atendimento": a conversa volta para o bot e o atendente fica livre para o próximo da fila.
+  // "Encerrar atendimento": a equipe resolveu o que o cliente pediu e o bot volta a responder.
   resolverHumano: procedimentoUnidade.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
     await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
-    await encerrarAtendimento(ctx.db, input.telefone, input.numeroId);
-    return { telefone: input.telefone };
-  }),
-
-  // O atendente precisou sair: o cliente volta para a fila (sem perder a vez) e vai para o próximo livre.
-  devolverParaFila: procedimentoUnidade.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
-    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
-    await devolverParaFila(ctx.db, input.telefone, input.numeroId);
+    await ctx.db
+      .update(conversasConfig)
+      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null })
+      .where(and(eq(conversasConfig.telefone, input.telefone), eq(conversasConfig.numeroId, input.numeroId)));
     return { telefone: input.telefone };
   }),
 

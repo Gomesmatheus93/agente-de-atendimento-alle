@@ -12,10 +12,7 @@ import {
   conversasExcluidas,
   duvidasIa,
   funilClientes,
-  assumirAtendimento,
-  distribuirFilaDoNumero,
   numerosWhatsapp,
-  usuarios,
 } from "@atendimento-academias/db";
 import {
   JANELA_RESPOSTA_MS,
@@ -128,9 +125,6 @@ export async function enviarMensagem(
     // Imagem do agente (midias_agente) anexada à resposta: o texto vai como legenda quando cabe.
     imagem?: { midiaUrl: string; mimeType: string };
   },
-  // Funcionário que escreveu pelo painel: se a conversa estiver sem atendente, ela passa a ser dele
-  // (e ele fica ocupado na fila). Resposta do bot (integração) não tem autor.
-  autorId?: number,
 ): Promise<{ id: number }> {
   garantirJanelaAberta(await ultimaMensagemDoCliente(db, input.telefone, input.numeroId));
   const conversa = { telefone: input.telefone, numeroId: input.numeroId };
@@ -159,7 +153,6 @@ export async function enviarMensagem(
   }
 
   await marcarComoRespondida(db, input.telefone, input.numeroId);
-  if (autorId !== undefined) await assumirAtendimento(db, input.telefone, input.numeroId, autorId);
 
   if (input.sugestaoId) {
     await db
@@ -185,7 +178,7 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
   const excluidaEm = await conversaExcluidaEm(db, telefone, numeroId);
   const depoisDaExclusao = (coluna: Parameters<typeof gt>[0]): SQL | undefined => (excluidaEm ? gt(coluna, excluidaEm) : undefined);
 
-  const [respostas, envios, saidas, [configComAtendente], [contato], [sugestao]] = await Promise.all([
+  const [respostas, envios, saidas, [config], [contato], [sugestao]] = await Promise.all([
     db
       .select({
         id: respostasClientes.id,
@@ -239,9 +232,8 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       .orderBy(desc(mensagensSaida.createdAt), desc(mensagensSaida.id))
       .limit(MAX_SAIDAS_NA_CONVERSA),
     db
-      .select({ config: conversasConfig, atendenteNome: usuarios.nome })
+      .select()
       .from(conversasConfig)
-      .leftJoin(usuarios, eq(usuarios.id, conversasConfig.atendenteId))
       .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId))),
     db.select().from(contatos).where(eq(contatos.telefone, telefone)),
     db
@@ -252,7 +244,6 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       .limit(1),
   ]);
 
-  const config = configComAtendente?.config;
   if (respostas.length === 0 && envios.length === 0 && saidas.length === 0) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada" });
   }
@@ -324,11 +315,6 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
     iaAtiva: config?.iaAtiva ?? false,
     precisaHumano: config?.precisaHumano ?? false,
     motivoHumano: config?.motivoHumano ?? null,
-    // Quem está com o atendimento aberto (null = ninguém; o bot responde se a IA estiver ligada).
-    atendente:
-      config?.atendenteId && configComAtendente?.atendenteNome
-        ? { id: config.atendenteId, nome: configComAtendente.atendenteNome, desde: config.atendimentoDesde?.toISOString() ?? null }
-        : null,
     sugestao: sugestao ? { id: sugestao.id, texto: sugestao.texto, em: sugestao.em.toISOString() } : null,
     janela: { aberta: expiraEm !== null && expiraEm.getTime() > Date.now(), expiraEm: expiraEm?.toISOString() ?? null },
     mensagens,
@@ -336,8 +322,8 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
 }
 
 // O bot (interno ou n8n) decidiu que precisa de uma pessoa: mesma trilha que já existe para a IA
-// interna — a conversa ganha o selo "Humano" em Conversas, para de receber resposta automática e entra na
-// fila: vai para o próximo funcionário disponível (ou espera, se todos estiverem ocupados).
+// interna — a conversa ganha o selo "Humano" em Conversas, o painel avisa a equipe e o bot para de
+// responder até alguém encerrar o atendimento.
 export async function passarParaHumano(db: Db, telefone: string, numeroId: number, motivo: string): Promise<void> {
   await db
     .insert(conversasConfig)
@@ -347,7 +333,6 @@ export async function passarParaHumano(db: Db, telefone: string, numeroId: numbe
       // Pedido repetido mantém o horário do primeiro: o aviso do painel não "renasce" a cada mensagem.
       set: { precisaHumano: true, motivoHumano: motivo.slice(0, 500), humanoPedidoEm: sql`coalesce(${conversasConfig.humanoPedidoEm}, now())` },
     });
-  await distribuirFilaDoNumero(db, numeroId);
 }
 
 // "Excluir conversa": some de Conversas e do Funil, e o bot/IA passam a ler a conversa vazia. Nada de
@@ -374,9 +359,7 @@ export async function excluirConversa(db: Db, telefone: string, numeroId: number
     await tx.delete(duvidasIa).where(and(eq(duvidasIa.telefone, telefone), eq(duvidasIa.numeroId, numeroId)));
     await tx
       .update(conversasConfig)
-      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null, atendenteId: null, atendimentoDesde: null })
+      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null })
       .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
   });
-  // Quem atendia essa conversa ficou livre.
-  await distribuirFilaDoNumero(db, numeroId);
 }

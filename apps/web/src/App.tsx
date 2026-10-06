@@ -5,7 +5,6 @@ import { Login } from "./pages/Login.js";
 import { Campanhas } from "./pages/Campanhas.js";
 import { Configuracoes } from "./pages/Configuracoes.js";
 import { Usuarios } from "./pages/Usuarios.js";
-import { Fila } from "./pages/Fila.js";
 import { Unidades } from "./pages/Unidades.js";
 import { NovaCampanha } from "./pages/NovaCampanha/NovaCampanha.js";
 import { Calendario } from "./pages/Calendario.js";
@@ -143,12 +142,6 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
       return (
         <Layout telaAtiva="usuarios" titulo="Equipe" descricao="Quem trabalha nesta unidade e o que cada um pode fazer.">
           <Usuarios />
-        </Layout>
-      );
-    case "fila":
-      return (
-        <Layout telaAtiva="fila" titulo="Fila de atendimento" descricao="Quem está disponível, quem está atendendo e quem está esperando.">
-          <Fila />
         </Layout>
       );
     case "conversas":

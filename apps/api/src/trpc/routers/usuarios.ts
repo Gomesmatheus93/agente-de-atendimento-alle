@@ -1,4 +1,4 @@
-import { devolverAtendimentosDe, gerarHashDeSenha, sessoes, usuarios, type Db } from "@atendimento-academias/db";
+import { gerarHashDeSenha, sessoes, usuarios, type Db } from "@atendimento-academias/db";
 import {
   atualizarUsuarioInputSchema,
   criarUsuarioInputSchema,
@@ -90,13 +90,8 @@ export const usuariosRouter = router({
       })
       .where(eq(usuarios.id, input.id));
 
-    // Quem foi desativado perde o acesso na hora, sem esperar a sessão vencer, e sai da fila: os clientes
-    // que estavam com ele voltam para os próximos atendentes.
-    if (input.ativo === false) {
-      await ctx.db.delete(sessoes).where(eq(sessoes.usuarioId, input.id));
-      await ctx.db.update(usuarios).set({ disponivel: false, disponivelDesde: null }).where(eq(usuarios.id, input.id));
-      await devolverAtendimentosDe(ctx.db, input.id, ctx.unidadeId);
-    }
+    // Quem foi desativado perde o acesso na hora, sem esperar a sessão vencer.
+    if (input.ativo === false) await ctx.db.delete(sessoes).where(eq(sessoes.usuarioId, input.id));
 
     return { id: input.id };
   }),
@@ -122,9 +117,6 @@ export const usuariosRouter = router({
     const usuario = await usuarioDaUnidade(ctx.db, ctx.unidadeId, input.id);
     if (usuario.papel === "admin") await garantirQueSobraAdmin(ctx.db, ctx.unidadeId, usuario.id);
 
-    // Sai da fila antes de devolver os clientes dele, para a fila não devolvê-los para ele mesmo.
-    await ctx.db.update(usuarios).set({ disponivel: false }).where(eq(usuarios.id, input.id));
-    await devolverAtendimentosDe(ctx.db, input.id, ctx.unidadeId);
     await ctx.db.delete(usuarios).where(eq(usuarios.id, input.id));
     return { id: input.id };
   }),

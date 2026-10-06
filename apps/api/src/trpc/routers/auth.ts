@@ -99,8 +99,6 @@ export const authRouter = router({
     const token = tokenDaSessao(ctx.req.headers.cookie);
 
     if (token) await ctx.db.delete(sessoes).where(eq(sessoes.token, token));
-    // Quem sai do painel sai da fila: não pode receber cliente sem estar olhando.
-    await ctx.db.update(usuarios).set({ disponivel: false, disponivelDesde: null }).where(eq(usuarios.id, ctx.usuario.id));
     ctx.res.appendHeader("Set-Cookie", `${COOKIE_SESSAO}=; ${ATRIBUTOS_COOKIE}; Max-Age=0`);
     return { ok: true };
   }),

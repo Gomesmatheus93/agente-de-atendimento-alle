@@ -175,7 +175,7 @@ Um agente com o Claude (Anthropic) escreve **rascunhos** de resposta nas convers
 1. Chega mensagem de texto do cliente pelo webhook. Se a IA estiver ligada naquela conversa, a API pede uma sugestão à fila `ia-sugestao` com **20 s de atraso**: mensagens que o cliente manda em sequência caem no mesmo pedido, e a IA lê a conversa inteira só quando ele roda.
 2. O **worker** confere, na hora de rodar, se ainda vale sugerir: IA ligada, conversa não passada para humano, janela de 24h aberta, ninguém da equipe nem nenhum disparo falou depois da última mensagem do cliente, e não existe sugestão para aquela mesma mensagem.
 3. O agente (`apps/worker/src/ia/agenteAtendimento.ts`) manda ao Claude as instruções, a base de conhecimento e as últimas 40 mensagens da conversa. Ele devolve ou o texto da resposta, ou uma chamada à ferramenta `pedir_humano`.
-4. Texto vira uma sugestão pendente em `sugestoes_ia`, descartando a anterior. `pedir_humano` marca `conversas_config.precisa_humano` com o motivo e coloca a conversa na fila de atendimento (ver [Fila de atendimento](#fila-de-atendimento)); a IA para de sugerir nela até alguém clicar em **Encerrar atendimento**.
+4. Texto vira uma sugestão pendente em `sugestoes_ia`, descartando a anterior. `pedir_humano` marca `conversas_config.precisa_humano` com o motivo: a conversa ganha o selo **Humano** na lista e um aviso no topo, e a IA para de sugerir nela até alguém clicar em **Encerrar atendimento**.
 
 Ao ligar a IA numa conversa em que o cliente está esperando, ela já sugere na hora; o botão **Pedir sugestão agora** faz o mesmo a qualquer momento.
 
@@ -186,10 +186,9 @@ Ao ligar a IA numa conversa em que o cliente está esperando, ela já sugere na 
   - alguém da equipe desliga à mão na conversa (a escolha fica guardada; para voltar, é preciso religar à mão);
   - o cliente pede para falar com uma pessoa;
   - o bot não sabe responder.
-- Nos dois últimos casos a conversa entra na **fila de atendimento** e vai para o próximo funcionário disponível. O bot não responde até alguém clicar em **Encerrar atendimento**.
-- Um funcionário que responde um cliente à mão também vira o atendente dele, e o bot para nessa conversa até o atendimento ser encerrado.
+- Nos dois últimos casos a conversa fica marcada como **precisa de humano**, e o bot não responde até alguém clicar em **Encerrar atendimento**.
 - Quem está com o painel aberto, em qualquer tela, é avisado assim:
-  - aparece um aviso no canto da tela, com o motivo e há quanto tempo o cliente espera — para quem recebeu o cliente da fila ("foi encaminhado para você") e, se ninguém estiver livre, para todos;
+  - aparece um aviso no canto da tela, com o motivo e há quanto tempo o cliente espera;
   - toca um som curto;
   - o título da aba mostra quantos clientes estão esperando;
   - o menu Conversas mostra o selo 🙋;
@@ -232,7 +231,7 @@ Há três papéis:
 
 - **Superadmin** (dono da plataforma, sem unidade): cria as unidades na tela **Unidades**, já com o responsável de cada uma, e entra em qualquer unidade pelo seletor do menu para ver ou configurar.
 - **Administrador** (dono da unidade): cadastra o número em **Configurações** e cria os funcionários em **Equipe**.
-- **Funcionário:** atende as conversas e entra na fila pelo check-in.
+- **Funcionário:** atende as conversas (cada resposta sai assinada com o nome dele).
 
 O primeiro usuário, criado no primeiro acesso, é o superadmin. Não há e-mail de convite: a senha provisória é repassada por fora.
 
@@ -246,19 +245,9 @@ Regras que a plataforma garante:
 - **Desativar ou trocar a senha derruba as sessões abertas** daquela pessoa na hora, em qualquer computador — não espera o cookie vencer.
 - **Unidade desativada:** a equipe dela não entra e as mensagens dos números dela são ignoradas. Reativar devolve tudo como estava.
 
-## Fila de atendimento
+## Assinatura do atendente
 
-Quando um cliente pede uma pessoa, ou o bot não sabe responder, a conversa entra na fila da unidade (regras em `packages/db/src/fila.ts`):
-
-- **Check-in:** cada funcionário marca no menu lateral que está disponível ("Fazer check-in"). Sair do painel tira a pessoa da fila.
-- **Quem recebe:** o funcionário disponível que está há mais tempo sem receber ninguém. O nome dele aparece na conversa, na lista de conversas e no aviso.
-- **Ocupado:** enquanto tiver um atendimento aberto, a pessoa fica fora da vez e o próximo cliente vai para outro funcionário disponível. Responder um cliente à mão também abre um atendimento.
-- **Ninguém livre:** o cliente fica esperando e vai para o primeiro que fizer check-in ou encerrar um atendimento. Enquanto isso, o aviso aparece para todos.
-- **Encerrar atendimento** (na conversa): o bot volta a responder e o funcionário fica livre para o próximo.
-- **Devolver para a fila:** tira o cliente de quem estava atendendo, sem ele perder a vez.
-- Funcionário desativado ou removido: os clientes dele voltam para a fila.
-
-**Assinatura do atendente:** toda resposta enviada pelo painel sai com o nome do funcionário em negrito na primeira linha, como no WhatsApp:
+Toda resposta enviada pelo painel sai com o nome do funcionário em negrito na primeira linha, como no WhatsApp:
 
 ```
 *Ana*
@@ -266,8 +255,6 @@ Olá! Posso ajudar com os planos?
 ```
 
 O funcionário escolhe o nome no próprio chat antes de responder (fica salvo no usuário dele; "Trocar nome" muda). Sem nome escolhido o envio fica travado. As respostas do bot (n8n) e as notas de voz não levam assinatura.
-
-A tela **Fila de atendimento** mostra a equipe (disponível, ocupado com quem, ausente, posição na fila) e os clientes esperando.
 
 ## Fora de escopo por enquanto
 

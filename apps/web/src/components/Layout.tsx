@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import type { Rota } from "../lib/route.js";
-import { AvisosDeHumano, pedidoRelevante, usePedidosDeHumano } from "./AvisosDeHumano.js";
+import { AvisosDeHumano, usePedidosDeHumano } from "./AvisosDeHumano.js";
 import { Sidebar } from "./Sidebar.js";
 
 interface LayoutProps {
@@ -15,7 +15,7 @@ interface LayoutProps {
 
 export function Layout({ telaAtiva, titulo, descricao, acoes, ampla = false, children }: LayoutProps) {
   // Com cliente esperando uma pessoa, o título da aba mostra quantos — dá para ver mesmo em outra aba.
-  const esperando = (usePedidosDeHumano().data ?? []).filter(pedidoRelevante).length;
+  const esperando = usePedidosDeHumano().data?.length ?? 0;
   useEffect(() => {
     document.title = `${esperando > 0 ? `(${esperando}) 🙋 ` : ""}${titulo} · Allp Chat`;
   }, [titulo, esperando]);

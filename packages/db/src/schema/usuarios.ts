@@ -16,11 +16,6 @@ export const usuarios = pgTable("usuarios", {
   ativo: boolean("ativo").notNull().default(true),
   // Nome que o funcionário escolheu para assinar as respostas pelo painel ("*Nome*" na primeira linha).
   assinatura: varchar("assinatura", { length: 60 }),
-  // Check-in: disponível entra na fila de atendimento humano da unidade.
-  disponivel: boolean("disponivel").notNull().default(false),
-  disponivelDesde: timestamp("disponivel_desde", { withTimezone: true }),
-  // Quando recebeu o último cliente da fila: quem está há mais tempo sem receber é o próximo.
-  ultimaAtribuicaoEm: timestamp("ultima_atribuicao_em", { withTimezone: true }),
   ...timestamps(),
 }, (tabela) => [index("usuarios_unidade").on(tabela.unidadeId)]);
 
