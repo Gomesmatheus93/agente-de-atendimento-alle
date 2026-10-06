@@ -110,6 +110,7 @@ async function criarAgendadas(db: ReturnType<typeof createDbClient>, templates: 
       .insert(campanhasDisparo)
       .values({
         nome: `${PREFIXO_DEMO}${agendada.nome}`,
+        unidadeId: template.unidadeId,
         templateId: template.id,
         status: "agendada",
         custoUnitario: precoDaCategoria(template.categoria).toFixed(4),
@@ -204,6 +205,7 @@ async function main(): Promise<void> {
       .insert(campanhasDisparo)
       .values({
         nome: `${PREFIXO_DEMO}${campanha.nome}`,
+        unidadeId: template.unidadeId,
         templateId: template.id,
         status: "concluida",
         custoUnitario: precoDaCategoria(template.categoria).toFixed(4),

@@ -1,4 +1,12 @@
-import { configuracoes, contatos, conversasConfig, conversasExcluidas, funilClientes, respostasClientes } from "@atendimento-academias/db";
+import {
+  configuracoes,
+  contatos,
+  conversasConfig,
+  conversasExcluidas,
+  doNumeroDaUnidade,
+  funilClientes,
+  respostasClientes,
+} from "@atendimento-academias/db";
 import {
   CHAVE_ANALISE_DISPONIVEL,
   CHAVE_ANALISE_STATUS,
@@ -8,9 +16,10 @@ import {
   type StatusDaAnalise,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, inArray, isNotNull, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { pedirAnaliseDeConversas } from "../../queue.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { garantirNumeroDaUnidade } from "../../servicos/conversas.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 // O quadro mostra as conversas mais recentes; acima disso o kanban deixa de ser legível mesmo.
 const MAX_CARDS = 1000;
@@ -18,7 +27,7 @@ const TAMANHO_PREVIA = 160;
 
 export const funilRouter = router({
   // Um card por cliente que já respondeu (número + telefone). Sem linha em funil_clientes = "em_conversa".
-  quadro: procedimentoAutenticado.query(async ({ ctx }) => {
+  quadro: procedimentoUnidade.query(async ({ ctx }) => {
     const conversas = await ctx.db
       .select({
         numeroId: respostasClientes.numeroId,
@@ -29,7 +38,7 @@ export const funilRouter = router({
         naoLidas: sql<number>`count(*) filter (where ${respostasClientes.lidaEm} is null)`.mapWith(Number),
       })
       .from(respostasClientes)
-      .where(isNotNull(respostasClientes.numeroId))
+      .where(doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId))
       .groupBy(respostasClientes.numeroId, respostasClientes.telefone)
       .orderBy(desc(max(respostasClientes.recebidaEm)))
       .limit(MAX_CARDS);
@@ -39,12 +48,12 @@ export const funilRouter = router({
 
     const [ultimas, funil, nomes, configs, exclusoes] = await Promise.all([
       ids.length ? ctx.db.select({ id: respostasClientes.id, tipo: respostasClientes.tipo, texto: respostasClientes.texto }).from(respostasClientes).where(inArray(respostasClientes.id, ids)) : [],
-      ctx.db.select().from(funilClientes),
+      ctx.db.select().from(funilClientes).where(doNumeroDaUnidade(funilClientes.numeroId, ctx.unidadeId)),
       telefones.length ? ctx.db.select().from(contatos).where(inArray(contatos.telefone, telefones)) : [],
       telefones.length
-        ? ctx.db.select({ telefone: conversasConfig.telefone, numeroId: conversasConfig.numeroId, precisaHumano: conversasConfig.precisaHumano }).from(conversasConfig).where(inArray(conversasConfig.telefone, telefones))
+        ? ctx.db.select({ telefone: conversasConfig.telefone, numeroId: conversasConfig.numeroId, precisaHumano: conversasConfig.precisaHumano }).from(conversasConfig).where(and(inArray(conversasConfig.telefone, telefones), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId)))
         : [],
-      ctx.db.select().from(conversasExcluidas),
+      ctx.db.select().from(conversasExcluidas).where(doNumeroDaUnidade(conversasExcluidas.numeroId, ctx.unidadeId)),
     ]);
 
     // Conversa excluída sai do funil até o cliente escrever de novo.
@@ -96,7 +105,8 @@ export const funilRouter = router({
   }),
 
   // Mover à mão fixa a etapa: a análise diária continua atualizando o resumo, mas não muda mais o card de coluna.
-  mover: procedimentoAutenticado.input(moverNoFunilInputSchema).mutation(async ({ ctx, input }) => {
+  mover: procedimentoUnidade.input(moverNoFunilInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     const perdeu = input.etapa === "nao_fechou";
     const valores = {
       etapa: input.etapa,
@@ -112,9 +122,10 @@ export const funilRouter = router({
   }),
 
   // Devolve o card para a IA decidir a etapa na próxima análise.
-  devolverParaIa: procedimentoAutenticado
+  devolverParaIa: procedimentoUnidade
     .input(moverNoFunilInputSchema.pick({ telefone: true, numeroId: true }))
     .mutation(async ({ ctx, input }) => {
+      await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
       await ctx.db
         .update(funilClientes)
         // Zerar a última mensagem analisada faz a próxima rodada reler a conversa e reposicionar o card.
@@ -123,11 +134,11 @@ export const funilRouter = router({
       return { ok: true };
     }),
 
-  statusAnalise: procedimentoAutenticado.query(async ({ ctx }) => {
+  statusAnalise: procedimentoUnidade.query(async ({ ctx }) => {
     const linhas = await ctx.db
       .select()
       .from(configuracoes)
-      .where(inArray(configuracoes.chave, [CHAVE_ANALISE_STATUS, CHAVE_ANALISE_DISPONIVEL]));
+      .where(and(isNull(configuracoes.unidadeId), inArray(configuracoes.chave, [CHAVE_ANALISE_STATUS, CHAVE_ANALISE_DISPONIVEL])));
     const status = linhas.find((linha) => linha.chave === CHAVE_ANALISE_STATUS)?.valor;
     return {
       disponivel: linhas.find((linha) => linha.chave === CHAVE_ANALISE_DISPONIVEL)?.valor === "1",
@@ -135,8 +146,11 @@ export const funilRouter = router({
     };
   }),
 
-  analisarAgora: procedimentoAutenticado.mutation(async ({ ctx }) => {
-    const [disponivel] = await ctx.db.select().from(configuracoes).where(eq(configuracoes.chave, CHAVE_ANALISE_DISPONIVEL));
+  analisarAgora: procedimentoUnidade.mutation(async ({ ctx }) => {
+    const [disponivel] = await ctx.db
+      .select()
+      .from(configuracoes)
+      .where(and(isNull(configuracoes.unidadeId), eq(configuracoes.chave, CHAVE_ANALISE_DISPONIVEL)));
     if (disponivel?.valor !== "1") {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",

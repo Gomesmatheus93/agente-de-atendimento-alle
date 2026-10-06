@@ -2,11 +2,11 @@ import { campanhasDisparo, templatesWhatsapp } from "@atendimento-academias/db";
 import { calendarioInputSchema } from "@atendimento-academias/shared";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { carregarProgresso, progressoVazio } from "../progresso.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 export const calendarioRouter = router({
   // Campanhas cujo disparo cai no intervalo: as já disparadas (data em que começaram) e as agendadas (data prevista).
-  periodo: procedimentoAutenticado.input(calendarioInputSchema).query(async ({ ctx, input }) => {
+  periodo: procedimentoUnidade.input(calendarioInputSchema).query(async ({ ctx, input }) => {
     const campanhas = await ctx.db
       .select({
         id: campanhasDisparo.id,
@@ -17,7 +17,13 @@ export const calendarioRouter = router({
       })
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
-      .where(and(gte(campanhasDisparo.disparoEm, new Date(input.inicio)), lt(campanhasDisparo.disparoEm, new Date(input.fim))))
+      .where(
+        and(
+          eq(campanhasDisparo.unidadeId, ctx.unidadeId),
+          gte(campanhasDisparo.disparoEm, new Date(input.inicio)),
+          lt(campanhasDisparo.disparoEm, new Date(input.fim)),
+        ),
+      )
       .orderBy(asc(campanhasDisparo.disparoEm), asc(campanhasDisparo.id));
 
     const progressoPorCampanha = await carregarProgresso(

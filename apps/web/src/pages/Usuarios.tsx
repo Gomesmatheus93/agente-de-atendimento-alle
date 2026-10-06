@@ -1,4 +1,4 @@
-import { PAPEIS_USUARIO, ROTULO_PAPEL, TAMANHO_MIN_SENHA, type PapelUsuario } from "@atendimento-academias/shared";
+import { PAPEIS_DA_UNIDADE, ROTULO_PAPEL, TAMANHO_MIN_SENHA, type PapelDaUnidade } from "@atendimento-academias/shared";
 import { useState, type FormEvent } from "react";
 import { Card } from "../components/Card.js";
 import { Button } from "../components/ui/Button.js";
@@ -22,10 +22,11 @@ export function Usuarios() {
       <NovoUsuario onCriado={recarregar} />
 
       <Card>
-        <h3 className="font-heading text-base font-bold">Quem tem acesso</h3>
+        <h3 className="font-heading text-base font-bold">Equipe da unidade</h3>
         <p className="mt-1 text-sm text-ink-2">
-          Administrador também gerencia usuários; membro usa o resto do painel. Desativar ou trocar a senha derruba as
-          sessões abertas da pessoa na hora.
+          O administrador cuida das configurações e da equipe; os funcionários atendem as conversas e entram na fila de
+          atendimento pelo check-in. Desativar ou trocar a senha derruba as sessões abertas da pessoa na hora, e os
+          clientes que estavam com ela voltam para a fila.
         </p>
 
         <ul className="mt-4 flex flex-col divide-y divide-card-border border-y border-card-border">
@@ -43,7 +44,7 @@ function NovoUsuario({ onCriado }: { onCriado: () => void }) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [papel, setPapel] = useState<PapelUsuario>("membro");
+  const [papel, setPapel] = useState<PapelDaUnidade>("membro");
 
   const criar = trpc.usuarios.criar.useMutation({
     onSuccess: (usuario) => {
@@ -64,7 +65,7 @@ function NovoUsuario({ onCriado }: { onCriado: () => void }) {
 
   return (
     <Card>
-      <h3 className="font-heading text-base font-bold">Criar usuário</h3>
+      <h3 className="font-heading text-base font-bold">Adicionar à equipe</h3>
       <p className="mt-1 text-sm text-ink-2">
         Você define a senha e a repassa para a pessoa. Não há e-mail de convite: quem receber entra direto com esses dados.
       </p>
@@ -103,10 +104,10 @@ function NovoUsuario({ onCriado }: { onCriado: () => void }) {
           Papel
           <select
             value={papel}
-            onChange={(e) => setPapel(e.target.value as PapelUsuario)}
+            onChange={(e) => setPapel(e.target.value as PapelDaUnidade)}
             className="rounded-lg px-3 py-2 text-sm"
           >
-            {PAPEIS_USUARIO.map((opcao) => (
+            {PAPEIS_DA_UNIDADE.map((opcao) => (
               <option key={opcao} value={opcao}>
                 {ROTULO_PAPEL[opcao]}
               </option>
@@ -115,7 +116,7 @@ function NovoUsuario({ onCriado }: { onCriado: () => void }) {
         </label>
 
         <Button type="submit" disabled={criar.isPending} className="self-start sm:col-span-2">
-          {criar.isPending ? "Criando…" : "Criar usuário"}
+          {criar.isPending ? "Criando…" : "Adicionar"}
         </Button>
       </form>
     </Card>
@@ -165,11 +166,11 @@ function LinhaDoUsuario({ usuario, onMudou }: { usuario: Usuario; onMudou: () =>
           <select
             value={usuario.papel}
             disabled={ocupado}
-            onChange={(e) => atualizar.mutate({ id: usuario.id, papel: e.target.value as PapelUsuario })}
+            onChange={(e) => atualizar.mutate({ id: usuario.id, papel: e.target.value as PapelDaUnidade })}
             className="rounded-lg px-2 py-1 text-xs"
             aria-label={`Papel de ${usuario.nome}`}
           >
-            {PAPEIS_USUARIO.map((opcao) => (
+            {PAPEIS_DA_UNIDADE.map((opcao) => (
               <option key={opcao} value={opcao}>
                 {ROTULO_PAPEL[opcao]}
               </option>

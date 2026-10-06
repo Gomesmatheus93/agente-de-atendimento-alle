@@ -3,9 +3,13 @@ import { timestamps } from "./columns.js";
 import { etapaKanbanEnum, statusCampanhaEnum } from "./enums.js";
 import { templatesWhatsapp } from "./templatesWhatsapp.js";
 import { numerosWhatsapp } from "./whatsapp.js";
+import { unidades } from "./unidades.js";
 
 export const campanhasDisparo = pgTable("campanhas_disparo", {
   id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+  unidadeId: integer("unidade_id")
+    .notNull()
+    .references(() => unidades.id, { onDelete: "cascade" }),
   nome: varchar("nome", { length: 255 }).notNull(),
   templateId: integer("template_id")
     .notNull()

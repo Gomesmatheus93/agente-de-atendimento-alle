@@ -21,7 +21,7 @@ export function Configuracoes() {
   if (configuracao.isPending || estado.isPending) return <p className="text-sm text-ink-2">Carregando…</p>;
 
   // A API já recusa as alterações de quem não é admin; aqui só evita mostrar formulários que não vão salvar.
-  if (estado.data?.usuario?.papel !== "admin") {
+  if (estado.data?.usuario?.papel !== "admin" && estado.data?.usuario?.papel !== "superadmin") {
     return (
       <p role="note" className="rounded-xl border border-card-border bg-surface px-4 py-3 text-sm text-ink-2">
         As configurações (contas do WhatsApp, webhook, chave de integração e agente) só podem ser alteradas por um

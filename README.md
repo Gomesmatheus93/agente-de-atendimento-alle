@@ -175,7 +175,7 @@ Um agente com o Claude (Anthropic) escreve **rascunhos** de resposta nas convers
 1. Chega mensagem de texto do cliente pelo webhook. Se a IA estiver ligada naquela conversa, a API pede uma sugestão à fila `ia-sugestao` com **20 s de atraso**: mensagens que o cliente manda em sequência caem no mesmo pedido, e a IA lê a conversa inteira só quando ele roda.
 2. O **worker** confere, na hora de rodar, se ainda vale sugerir: IA ligada, conversa não passada para humano, janela de 24h aberta, ninguém da equipe nem nenhum disparo falou depois da última mensagem do cliente, e não existe sugestão para aquela mesma mensagem.
 3. O agente (`apps/worker/src/ia/agenteAtendimento.ts`) manda ao Claude as instruções, a base de conhecimento e as últimas 40 mensagens da conversa. Ele devolve ou o texto da resposta, ou uma chamada à ferramenta `pedir_humano`.
-4. Texto vira uma sugestão pendente em `sugestoes_ia`, descartando a anterior. `pedir_humano` marca `conversas_config.precisa_humano` com o motivo: a conversa ganha o selo **Humano** na lista e um aviso no topo, e a IA para de sugerir nela até alguém clicar em **Marcar como resolvida**.
+4. Texto vira uma sugestão pendente em `sugestoes_ia`, descartando a anterior. `pedir_humano` marca `conversas_config.precisa_humano` com o motivo e coloca a conversa na fila de atendimento (ver [Fila de atendimento](#fila-de-atendimento)); a IA para de sugerir nela até alguém clicar em **Encerrar atendimento**.
 
 Ao ligar a IA numa conversa em que o cliente está esperando, ela já sugere na hora; o botão **Pedir sugestão agora** faz o mesmo a qualquer momento.
 
@@ -186,9 +186,10 @@ Ao ligar a IA numa conversa em que o cliente está esperando, ela já sugere na 
   - alguém da equipe desliga à mão na conversa (a escolha fica guardada; para voltar, é preciso religar à mão);
   - o cliente pede para falar com uma pessoa;
   - o bot não sabe responder.
-- Nos dois últimos casos a conversa fica marcada como **precisa de humano**, e o bot não responde até alguém clicar em **Marcar como resolvida**.
+- Nos dois últimos casos a conversa entra na **fila de atendimento** e vai para o próximo funcionário disponível. O bot não responde até alguém clicar em **Encerrar atendimento**.
+- Um funcionário que responde um cliente à mão também vira o atendente dele, e o bot para nessa conversa até o atendimento ser encerrado.
 - Quem está com o painel aberto, em qualquer tela, é avisado assim:
-  - aparece um aviso no canto da tela, com o motivo e há quanto tempo o cliente espera;
+  - aparece um aviso no canto da tela, com o motivo e há quanto tempo o cliente espera — para quem recebeu o cliente da fila ("foi encaminhado para você") e, se ninguém estiver livre, para todos;
   - toca um som curto;
   - o título da aba mostra quantos clientes estão esperando;
   - o menu Conversas mostra o selo 🙋;
@@ -221,23 +222,43 @@ A tela **Funil de clientes** tem um card por cliente que respondeu, nas colunas 
 - **Ranking de dúvidas:** a aba *Análise da IA* da tela Dúvidas soma os temas e mostra, em destaque, as perguntas que ficaram **sem resposta** — o que acrescentar à base de conhecimento do agente no n8n. A aba *Palavras-chave* é o ranking antigo, que não depende da IA.
 - **Precisa de `ANTHROPIC_API_KEY` no `.env` da raiz do projeto.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.
 
-## Usuários e acesso
+## Unidades, usuários e acesso
+
+A plataforma é distribuída por unidade (academia). Cada unidade é um painel separado, com número de WhatsApp, conversas, campanhas, templates, configurações, imagens do agente, chave de integração e equipe próprios. Nada de uma unidade aparece na outra: toda consulta da API é filtrada pela unidade de quem está logado (`ctx.unidadeId`), e as conversas pertencem à unidade pelo número (`numeros_whatsapp.unidade_id`).
 
 O painel exige login. A senha é guardada com scrypt (nunca em texto), a sessão vive num cookie httpOnly de 30 dias e pode ser revogada apagando a linha em `sessoes`.
 
-Há dois papéis:
+Há três papéis:
 
-- **Administrador:** tudo, mais a tela **Usuários**.
-- **Membro:** todo o resto do painel — campanhas, conversas, relatórios, configurações — sem gerenciar quem entra.
+- **Superadmin** (dono da plataforma, sem unidade): cria as unidades na tela **Unidades**, já com o responsável de cada uma, e entra em qualquer unidade pelo seletor do menu para ver ou configurar.
+- **Administrador** (dono da unidade): cadastra o número em **Configurações** e cria os funcionários em **Equipe**.
+- **Funcionário:** atende as conversas e entra na fila pelo check-in.
 
-O primeiro usuário, criado no primeiro acesso, é administrador. Dali em diante é ele quem cria os outros em **Usuários**, definindo nome, e-mail, uma senha provisória e o papel. Não há e-mail de convite: a senha é repassada por fora.
+O primeiro usuário, criado no primeiro acesso, é o superadmin. Não há e-mail de convite: a senha provisória é repassada por fora.
 
 Regras que a plataforma garante:
 
-- **Sempre sobra um administrador ativo.** Rebaixar, desativar ou remover o último é recusado; promova outra pessoa antes.
+- **Uma conta do WhatsApp (WABA) só pode estar em uma unidade.** Cadastrar a mesma conta em outra unidade é recusado.
+- **Cada unidade tem o próprio webhook:** o token de verificação e o segredo do app ficam em Configurações de cada unidade, e cada evento da Meta é conferido com o segredo da unidade dona do número.
+- **Cada unidade tem a própria chave de integração** (n8n). A chave só alcança os números, templates e imagens da unidade. Chaves geradas antes das unidades continuam valendo para a primeira.
+- **Sempre sobra um administrador ativo na unidade.** Rebaixar, desativar ou remover o último é recusado; promova outra pessoa antes.
 - **Ninguém remove o próprio acesso.**
 - **Desativar ou trocar a senha derruba as sessões abertas** daquela pessoa na hora, em qualquer computador — não espera o cookie vencer.
-- O item **Usuários** não aparece no menu para quem é membro, e a API recusa a chamada mesmo se ele abrir a URL direto.
+- **Unidade desativada:** a equipe dela não entra e as mensagens dos números dela são ignoradas. Reativar devolve tudo como estava.
+
+## Fila de atendimento
+
+Quando um cliente pede uma pessoa, ou o bot não sabe responder, a conversa entra na fila da unidade (regras em `packages/db/src/fila.ts`):
+
+- **Check-in:** cada funcionário marca no menu lateral que está disponível ("Fazer check-in"). Sair do painel tira a pessoa da fila.
+- **Quem recebe:** o funcionário disponível que está há mais tempo sem receber ninguém. O nome dele aparece na conversa, na lista de conversas e no aviso.
+- **Ocupado:** enquanto tiver um atendimento aberto, a pessoa fica fora da vez e o próximo cliente vai para outro funcionário disponível. Responder um cliente à mão também abre um atendimento.
+- **Ninguém livre:** o cliente fica esperando e vai para o primeiro que fizer check-in ou encerrar um atendimento. Enquanto isso, o aviso aparece para todos.
+- **Encerrar atendimento** (na conversa): o bot volta a responder e o funcionário fica livre para o próximo.
+- **Devolver para a fila:** tira o cliente de quem estava atendendo, sem ele perder a vez.
+- Funcionário desativado ou removido: os clientes dele voltam para a fila.
+
+A tela **Fila de atendimento** mostra a equipe (disponível, ocupado com quem, ausente, posição na fila) e os clientes esperando.
 
 ## Fora de escopo por enquanto
 

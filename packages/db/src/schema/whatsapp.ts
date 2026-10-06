@@ -1,9 +1,14 @@
-import { boolean, index, integer, pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, primaryKey, text, unique, varchar } from "drizzle-orm/pg-core";
 import { timestamps } from "./columns.js";
+import { unidades } from "./unidades.js";
 
 // Uma conta do WhatsApp Business (WABA) da Meta, com o token que dá acesso a ela.
 export const contasWhatsapp = pgTable("contas_whatsapp", {
   id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+  // Unidade dona da conta: uma conta (WABA) só pode estar cadastrada em uma unidade.
+  unidadeId: integer("unidade_id")
+    .notNull()
+    .references(() => unidades.id, { onDelete: "cascade" }),
   nome: varchar("nome", { length: 120 }).notNull(),
   wabaId: varchar("waba_id", { length: 40 }).notNull().unique(),
   // Cifrado com a chave mestra (packages/db/src/cripto.ts). Nunca sai da API para o navegador.
@@ -22,6 +27,10 @@ export const numerosWhatsapp = pgTable(
     contaId: integer("conta_id")
       .notNull()
       .references(() => contasWhatsapp.id, { onDelete: "cascade" }),
+    // Copiada da conta: as conversas são separadas por unidade a partir do número.
+    unidadeId: integer("unidade_id")
+      .notNull()
+      .references(() => unidades.id, { onDelete: "cascade" }),
     phoneNumberId: varchar("phone_number_id", { length: 40 }).notNull().unique(),
     numeroExibicao: varchar("numero_exibicao", { length: 32 }).notNull(),
     nomeVerificado: varchar("nome_verificado", { length: 120 }),
@@ -29,17 +38,24 @@ export const numerosWhatsapp = pgTable(
     ativo: boolean("ativo").notNull().default(false),
     ...timestamps(),
   },
-  (tabela) => [index("numeros_whatsapp_conta").on(tabela.contaId)],
+  (tabela) => [index("numeros_whatsapp_conta").on(tabela.contaId), index("numeros_whatsapp_unidade").on(tabela.unidadeId)],
 );
 
-// Configurações soltas da plataforma (token de verificação e segredo do app da Meta, por exemplo).
-// Valores marcados como secretos ficam cifrados e nunca voltam para a tela.
-export const configuracoes = pgTable("configuracoes", {
-  chave: varchar("chave", { length: 60 }).primaryKey(),
-  valor: text("valor").notNull(),
-  secreto: boolean("secreto").notNull().default(false),
-  ...timestamps(),
-});
+// Configurações soltas de cada unidade (token de verificação e segredo do app da Meta, modo do agente...).
+// unidade_id nulo = da plataforma inteira (ex.: situação da análise diária). Valores marcados como
+// secretos ficam cifrados e nunca voltam para a tela.
+export const configuracoes = pgTable(
+  "configuracoes",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    unidadeId: integer("unidade_id").references(() => unidades.id, { onDelete: "cascade" }),
+    chave: varchar("chave", { length: 60 }).notNull(),
+    valor: text("valor").notNull(),
+    secreto: boolean("secreto").notNull().default(false),
+    ...timestamps(),
+  },
+  (tabela) => [unique("configuracoes_unidade_chave").on(tabela.unidadeId, tabela.chave).nullsNotDistinct()],
+);
 
 export const CHAVE_WEBHOOK_VERIFY_TOKEN = "whatsapp.verify_token";
 export const CHAVE_WEBHOOK_APP_SECRET = "whatsapp.app_secret";
@@ -60,10 +76,17 @@ export const CHAVE_N8N_WEBHOOK_URL = "integracao.n8n_webhook_url";
 
 // Imagens que o agente (n8n) anexa às respostas, pelo nome: "planos" -> tabela de planos. O arquivo fica
 // em uploads/ e o worker sobe para a Meta na hora de enviar (reaproveitando o id por alguns dias).
-export const midiasAgente = pgTable("midias_agente", {
-  chave: varchar("chave", { length: 40 }).primaryKey(),
-  descricao: varchar("descricao", { length: 200 }),
-  midiaUrl: varchar("midia_url", { length: 500 }).notNull(),
-  mimeType: varchar("mime_type", { length: 100 }).notNull(),
-  ...timestamps(),
-});
+export const midiasAgente = pgTable(
+  "midias_agente",
+  {
+    unidadeId: integer("unidade_id")
+      .notNull()
+      .references(() => unidades.id, { onDelete: "cascade" }),
+    chave: varchar("chave", { length: 40 }).notNull(),
+    descricao: varchar("descricao", { length: 200 }),
+    midiaUrl: varchar("midia_url", { length: 500 }).notNull(),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
+    ...timestamps(),
+  },
+  (tabela) => [primaryKey({ columns: [tabela.unidadeId, tabela.chave] })],
+);

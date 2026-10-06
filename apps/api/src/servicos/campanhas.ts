@@ -15,11 +15,11 @@ import { getDisparoQueue } from "../queue.js";
 // Lógica de criar campanha: usada pela tela (tRPC, com sessão) e pela API de integração (chave, sem
 // sessão) — as duas caem exatamente nas mesmas regras e no mesmo caminho de envio, não há um "modo
 // simplificado" para automação externa.
-export async function criarCampanha(db: Db, input: CriarCampanhaInput): Promise<{ id: number; agendada: boolean }> {
+export async function criarCampanha(db: Db, input: CriarCampanhaInput, unidadeId: number): Promise<{ id: number; agendada: boolean }> {
   const [template] = await db
     .select()
     .from(templatesWhatsapp)
-    .where(and(eq(templatesWhatsapp.id, input.templateId), eq(templatesWhatsapp.ativo, true)));
+    .where(and(eq(templatesWhatsapp.id, input.templateId), eq(templatesWhatsapp.unidadeId, unidadeId), eq(templatesWhatsapp.ativo, true)));
 
   if (!template) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Template não encontrado" });
@@ -32,7 +32,10 @@ export async function criarCampanha(db: Db, input: CriarCampanhaInput): Promise<
     });
   }
 
-  const [numero] = await db.select().from(numerosWhatsapp).where(eq(numerosWhatsapp.id, input.numeroId));
+  const [numero] = await db
+    .select()
+    .from(numerosWhatsapp)
+    .where(and(eq(numerosWhatsapp.id, input.numeroId), eq(numerosWhatsapp.unidadeId, unidadeId)));
   if (!numero || !numero.ativo) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha um número ativo para enviar a campanha." });
   }
@@ -79,6 +82,7 @@ export async function criarCampanha(db: Db, input: CriarCampanhaInput): Promise<
     const [{ id }] = await tx
       .insert(campanhasDisparo)
       .values({
+        unidadeId,
         nome: input.nome,
         templateId: template.id,
         numeroId: numero.id,

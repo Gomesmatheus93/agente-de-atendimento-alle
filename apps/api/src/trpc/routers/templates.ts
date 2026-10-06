@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "drizzle-orm";
 import { salvarBuffer } from "../../media/armazenamento.js";
 import { criarTemplateNaMeta, subirImagemParaHandle } from "../../meta/graph.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 import { CATEGORIA_POR_NOME, erroDaMeta } from "./configuracoes.js";
 
 const CATEGORIA_NA_META = { marketing: "MARKETING", utilidade: "UTILITY" } as const;
@@ -44,17 +44,26 @@ function componentesParaMeta(entrada: CriarTemplateInput, imagemHandle: string |
 
 export const templatesRouter = router({
   // Sem número escolhido, lista todos; com número, só os da conta dele — são os que a Meta aceita enviar.
-  listar: procedimentoAutenticado.input(listarTemplatesInputSchema).query(async ({ ctx, input }) => {
+  listar: procedimentoUnidade.input(listarTemplatesInputSchema).query(async ({ ctx, input }) => {
     let contaId: number | null = null;
     if (input.numeroId) {
-      const [numero] = await ctx.db.select().from(numerosWhatsapp).where(eq(numerosWhatsapp.id, input.numeroId));
+      const [numero] = await ctx.db
+        .select()
+        .from(numerosWhatsapp)
+        .where(and(eq(numerosWhatsapp.id, input.numeroId), eq(numerosWhatsapp.unidadeId, ctx.unidadeId)));
       contaId = numero?.contaId ?? null;
     }
 
     const templates = await ctx.db
       .select()
       .from(templatesWhatsapp)
-      .where(contaId === null ? eq(templatesWhatsapp.ativo, true) : and(eq(templatesWhatsapp.ativo, true), eq(templatesWhatsapp.contaId, contaId)));
+      .where(
+        and(
+          eq(templatesWhatsapp.unidadeId, ctx.unidadeId),
+          eq(templatesWhatsapp.ativo, true),
+          contaId === null ? undefined : eq(templatesWhatsapp.contaId, contaId),
+        ),
+      );
 
     return templates.map((template) => ({
       id: template.id,
@@ -72,10 +81,14 @@ export const templatesRouter = router({
 
   // Tela Templates: todos os templates de cada conta, inclusive os que a Meta ainda não aprovou (esses
   // ficam fora de Nova campanha). Os sem conta são os exemplos do seed, que não existem na Meta.
-  porConta: procedimentoAutenticado.query(async ({ ctx }) => {
+  porConta: procedimentoUnidade.query(async ({ ctx }) => {
     const [contas, templates] = await Promise.all([
-      ctx.db.select({ id: contasWhatsapp.id, nome: contasWhatsapp.nome }).from(contasWhatsapp).orderBy(asc(contasWhatsapp.nome)),
-      ctx.db.select().from(templatesWhatsapp).orderBy(asc(templatesWhatsapp.nome)),
+      ctx.db
+        .select({ id: contasWhatsapp.id, nome: contasWhatsapp.nome })
+        .from(contasWhatsapp)
+        .where(eq(contasWhatsapp.unidadeId, ctx.unidadeId))
+        .orderBy(asc(contasWhatsapp.nome)),
+      ctx.db.select().from(templatesWhatsapp).where(eq(templatesWhatsapp.unidadeId, ctx.unidadeId)).orderBy(asc(templatesWhatsapp.nome)),
     ]);
 
     const resumir = (template: (typeof templates)[number]) => ({
@@ -108,8 +121,11 @@ export const templatesRouter = router({
 
   // Cria o template na Meta e guarda aqui como PENDING. A aprovação (ou reprovação, com motivo) chega
   // depois pelo webhook, no campo message_template_status_update; "Atualizar da Meta" também traz.
-  criar: procedimentoAutenticado.input(criarTemplateInputSchema).mutation(async ({ ctx, input }) => {
-    const [conta] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.id, input.contaId));
+  criar: procedimentoUnidade.input(criarTemplateInputSchema).mutation(async ({ ctx, input }) => {
+    const [conta] = await ctx.db
+      .select()
+      .from(contasWhatsapp)
+      .where(and(eq(contasWhatsapp.id, input.contaId), eq(contasWhatsapp.unidadeId, ctx.unidadeId)));
     if (!conta) throw new TRPCError({ code: "NOT_FOUND", message: "Conta não encontrada" });
 
     const [repetido] = await ctx.db
@@ -158,6 +174,7 @@ export const templatesRouter = router({
 
     const aprovado = criado.status === "APPROVED";
     await ctx.db.insert(templatesWhatsapp).values({
+      unidadeId: ctx.unidadeId,
       contaId: conta.id,
       nome: input.nome,
       conteudo: input.corpo,
@@ -177,8 +194,11 @@ export const templatesRouter = router({
   }),
 
   // Imagem usada no envio de um template que tem cabeçalho de imagem (importado da Meta sem ela, ou para trocar).
-  definirImagem: procedimentoAutenticado.input(definirImagemTemplateInputSchema).mutation(async ({ ctx, input }) => {
-    const [template] = await ctx.db.select().from(templatesWhatsapp).where(eq(templatesWhatsapp.id, input.templateId));
+  definirImagem: procedimentoUnidade.input(definirImagemTemplateInputSchema).mutation(async ({ ctx, input }) => {
+    const [template] = await ctx.db
+      .select()
+      .from(templatesWhatsapp)
+      .where(and(eq(templatesWhatsapp.id, input.templateId), eq(templatesWhatsapp.unidadeId, ctx.unidadeId)));
     if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "Template não encontrado" });
     if (template.cabecalhoFormato !== "IMAGE") {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Este template não tem cabeçalho de imagem." });

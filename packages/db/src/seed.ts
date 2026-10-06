@@ -1,6 +1,6 @@
-import { count } from "drizzle-orm";
+import { asc, count } from "drizzle-orm";
 import { createDbClient } from "./client.js";
-import { templatesWhatsapp } from "./schema/index.js";
+import { templatesWhatsapp, unidades } from "./schema/index.js";
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -14,13 +14,20 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Os exemplos ficam na primeira unidade (criada aqui se ainda não houver nenhuma).
+  let [unidade] = await db.select({ id: unidades.id }).from(unidades).orderBy(asc(unidades.id)).limit(1);
+  if (!unidade) [unidade] = await db.insert(unidades).values({ nome: "Unidade de exemplo" }).returning({ id: unidades.id });
+  const unidadeId = unidade!.id;
+
   await db.insert(templatesWhatsapp).values([
     {
+      unidadeId,
       nome: "boas_vindas",
       conteudo: "Olá {{nome}}, tudo bem? Aqui é da academia. Passando para desejar boas-vindas!",
       categoria: "utilidade",
     },
     {
+      unidadeId,
       nome: "promo",
       conteudo: "Oi {{nome}}! Esta semana você tem {{desconto}} de desconto na renovação do seu plano.",
       categoria: "marketing",

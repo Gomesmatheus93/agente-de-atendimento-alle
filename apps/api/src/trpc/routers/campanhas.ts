@@ -8,10 +8,10 @@ import {
   preencherTemplate,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { carregarProgresso, carregarRespondentes, precoUnitarioDe, progressoVazio, taxa } from "../progresso.js";
 import { criarCampanha } from "../../servicos/campanhas.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 // Custo é sobre as mensagens enviadas; a taxa de retorno é a fatia dessas mensagens que gerou resposta.
 function resumoRetornoECusto(enviados: number, respostas: number, custoUnitario: string | null) {
@@ -26,9 +26,9 @@ function resumoRetornoECusto(enviados: number, respostas: number, custoUnitario:
 export const campanhasRouter = router({
   // A regra de negócio mora em servicos/campanhas.ts: é a mesma usada pela API de integração (n8n),
   // então uma campanha criada pela tela e uma criada por automação passam pelo mesmo caminho.
-  criar: procedimentoAutenticado.input(criarCampanhaInputSchema).mutation(async ({ ctx, input }) => criarCampanha(ctx.db, input)),
+  criar: procedimentoUnidade.input(criarCampanhaInputSchema).mutation(async ({ ctx, input }) => criarCampanha(ctx.db, input, ctx.unidadeId)),
 
-  listar: procedimentoAutenticado.input(listarCampanhasInputSchema).query(async ({ ctx, input }) => {
+  listar: procedimentoUnidade.input(listarCampanhasInputSchema).query(async ({ ctx, input }) => {
     const campanhas = await ctx.db
       .select({
         id: campanhasDisparo.id,
@@ -42,6 +42,7 @@ export const campanhasRouter = router({
       })
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
+      .where(eq(campanhasDisparo.unidadeId, ctx.unidadeId))
       .orderBy(desc(campanhasDisparo.id))
       .limit(input.limite);
 
@@ -62,13 +63,13 @@ export const campanhasRouter = router({
   }),
 
   // Só vale para campanha que ainda não disparou: apaga a campanha e os destinatários, que nunca receberam nada.
-  cancelarAgendamento: procedimentoAutenticado.input(detalheCampanhaInputSchema).mutation(async ({ ctx, input }) => {
+  cancelarAgendamento: procedimentoUnidade.input(detalheCampanhaInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.transaction(async (tx) => {
       // Trava a linha: se o worker estiver iniciando essa campanha agora, um dos dois espera o outro.
       const [campanha] = await tx
         .select({ status: campanhasDisparo.status })
         .from(campanhasDisparo)
-        .where(eq(campanhasDisparo.id, input.id))
+        .where(and(eq(campanhasDisparo.id, input.id), eq(campanhasDisparo.unidadeId, ctx.unidadeId)))
         .for("update");
 
       if (!campanha) {
@@ -89,11 +90,11 @@ export const campanhasRouter = router({
   }),
 
   // Só muda onde o card aparece no kanban; não interfere no envio, que segue com o worker.
-  moverEtapa: procedimentoAutenticado.input(moverEtapaInputSchema).mutation(async ({ ctx, input }) => {
+  moverEtapa: procedimentoUnidade.input(moverEtapaInputSchema).mutation(async ({ ctx, input }) => {
     const [campanha] = await ctx.db
       .select({ id: campanhasDisparo.id })
       .from(campanhasDisparo)
-      .where(eq(campanhasDisparo.id, input.id));
+      .where(and(eq(campanhasDisparo.id, input.id), eq(campanhasDisparo.unidadeId, ctx.unidadeId)));
 
     if (!campanha) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
@@ -104,7 +105,7 @@ export const campanhasRouter = router({
     return { id: input.id, etapa: input.etapa };
   }),
 
-  detalhe: procedimentoAutenticado.input(detalheCampanhaInputSchema).query(async ({ ctx, input }) => {
+  detalhe: procedimentoUnidade.input(detalheCampanhaInputSchema).query(async ({ ctx, input }) => {
     const [campanha] = await ctx.db
       .select({
         id: campanhasDisparo.id,
@@ -118,7 +119,7 @@ export const campanhasRouter = router({
       })
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
-      .where(eq(campanhasDisparo.id, input.id));
+      .where(and(eq(campanhasDisparo.id, input.id), eq(campanhasDisparo.unidadeId, ctx.unidadeId)));
 
     if (!campanha) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Campanha não encontrada" });

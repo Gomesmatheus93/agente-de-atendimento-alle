@@ -233,9 +233,17 @@ function ItemDaLista({ conversa, selecionada }: { conversa: ConversaResumo; sele
               <p className={`truncate text-sm text-ink ${naoLida ? "font-semibold" : "font-medium"}`}>
                 {conversa.nome ?? formatarTelefone(conversa.telefone)}
               </p>
-              {conversa.precisaHumano ? (
+              {conversa.atendenteNome ? (
                 <span
-                  title="A IA passou esta conversa para a equipe"
+                  title={`Em atendimento com ${conversa.atendenteNome}`}
+                  className="inline-flex min-w-0 max-w-28 shrink items-center gap-0.5 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-900"
+                >
+                  <Icone nome="fone" tamanho={9} className="shrink-0" />
+                  <span className="truncate">{conversa.atendenteNome.split(" ")[0]}</span>
+                </span>
+              ) : conversa.precisaHumano ? (
+                <span
+                  title="Esperando um atendente da fila"
                   className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1 text-[10px] font-bold uppercase text-amber-900"
                 >
                   <Icone nome="usuarios" tamanho={9} />
@@ -374,13 +382,26 @@ function ConversaAberta({
     onError: (erro) => toast.erro(mensagemDeErro(erro)),
   });
 
+  const aoMudarAtendimento = () => {
+    aoMudarIa();
+    void utils.conversas.pedidosDeHumano.invalidate();
+    void utils.fila.estado.invalidate();
+  };
   const resolverHumano = trpc.conversas.resolverHumano.useMutation({
     onSuccess: () => {
-      toast.sucesso("Conversa marcada como resolvida. A IA volta a sugerir nas próximas mensagens.");
-      aoMudarIa();
+      toast.sucesso("Atendimento encerrado. O bot volta a responder este cliente.");
+      aoMudarAtendimento();
     },
     onError: (erro) => toast.erro(mensagemDeErro(erro)),
   });
+  const devolverParaFila = trpc.conversas.devolverParaFila.useMutation({
+    onSuccess: () => {
+      toast.sucesso("Cliente devolvido para a fila: vai para o próximo atendente disponível.");
+      aoMudarAtendimento();
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+  const euId = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.id;
 
   // Some da tela ao marcar: como no WhatsApp, "não lida" é para voltar à caixa de entrada depois.
   const marcarNaoLida = trpc.conversas.marcarComoNaoLida.useMutation({
@@ -520,15 +541,17 @@ function ConversaAberta({
         />
       </div>
 
-      {conversa.precisaHumano && (
+      {(conversa.precisaHumano || conversa.atendente) && (
         <AvisoDeHumano
           motivo={conversa.motivoHumano}
-          resolvendo={resolverHumano.isPending}
+          atendente={conversa.atendente ? (conversa.atendente.id === euId ? "você" : conversa.atendente.nome) : null}
+          ocupado={resolverHumano.isPending || devolverParaFila.isPending}
           onResolver={() => resolverHumano.mutate({ telefone, numeroId })}
+          onDevolver={() => devolverParaFila.mutate({ telefone, numeroId })}
         />
       )}
 
-      {conversa.janela.aberta && conversa.iaAtiva && !conversa.precisaHumano && (
+      {conversa.janela.aberta && conversa.iaAtiva && !conversa.precisaHumano && !conversa.atendente && (
         <CartaoDaSugestao
           telefone={conversa.telefone}
           numeroId={numeroId}
@@ -952,20 +975,47 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
   );
 }
 
-function AvisoDeHumano({ motivo, resolvendo, onResolver }: { motivo: string | null; resolvendo: boolean; onResolver: () => void }) {
+// Atendimento humano: quem está atendendo (escolhido pela fila, ou quem respondeu à mão) ou, sem ninguém
+// livre, que o cliente está esperando. Enquanto isso o bot não responde.
+function AvisoDeHumano({
+  motivo,
+  atendente,
+  ocupado,
+  onResolver,
+  onDevolver,
+}: {
+  motivo: string | null;
+  atendente: string | null;
+  ocupado: boolean;
+  onResolver: () => void;
+  onDevolver: () => void;
+}) {
   return (
     <div role="status" className="border-t border-amber-200 bg-amber-50 px-4 py-3 sm:px-6">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
         <p className="flex min-w-0 items-start gap-2 text-sm text-amber-900">
-          <Icone nome="usuarios" tamanho={16} className="mt-0.5 shrink-0" />
+          <Icone nome="fone" tamanho={16} className="mt-0.5 shrink-0" />
           <span>
-            <strong>A IA passou esta conversa para a equipe.</strong>
-            {motivo && <span className="block text-xs">{motivo}</span>}
+            <strong>
+              {atendente
+                ? `Em atendimento com ${atendente}.`
+                : "Esperando um atendente: ninguém está livre na fila agora."}
+            </strong>
+            <span className="block text-xs">
+              {motivo ? `${motivo} · ` : ""}O bot não responde até o atendimento ser encerrado.
+            </span>
           </span>
         </p>
-        <Button variante="secundario" onClick={onResolver} disabled={resolvendo} className="px-3 py-1.5 text-xs">
-          {resolvendo ? "Salvando…" : "Marcar como resolvida"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {atendente && (
+            <Button variante="fantasma" onClick={onDevolver} disabled={ocupado} className="px-3 py-1.5 text-xs">
+              Devolver para a fila
+            </Button>
+          )}
+          <Button variante="secundario" onClick={onResolver} disabled={ocupado} className="px-3 py-1.5 text-xs">
+            {ocupado ? "Salvando…" : "Encerrar atendimento"}
+          </Button>
+        </div>
       </div>
     </div>
   );

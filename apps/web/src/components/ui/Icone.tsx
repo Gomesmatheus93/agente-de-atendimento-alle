@@ -179,6 +179,19 @@ const ICONES = {
       <circle cx="15" cy="18" r="1" />
     </>
   ),
+  fone: (
+    <>
+      <path d="M3 14v-2a9 9 0 0 1 18 0v2" />
+      <path d="M21 15a2 2 0 0 1-2 2h-1v-6h1a2 2 0 0 1 2 2ZM3 15a2 2 0 0 0 2 2h1v-6H5a2 2 0 0 0-2 2Z" />
+    </>
+  ),
+  predio: (
+    <>
+      <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />
+      <path d="M16 9h2a2 2 0 0 1 2 2v10" />
+      <path d="M3 21h18M8 7h4M8 11h4M8 15h4" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type NomeIcone = keyof typeof ICONES;

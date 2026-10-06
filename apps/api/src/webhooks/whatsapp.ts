@@ -13,7 +13,14 @@ import { IA_SUGESTAO_ATRASO_MS, type TipoMensagem } from "@atendimento-academias
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
 import { z } from "zod";
-import { configuracaoDoAgente, configuracaoDoWebhook, numeroPeloPhoneNumberId, tokenDaConta } from "../config/plataforma.js";
+import {
+  configuracaoDoAgente,
+  numeroPeloPhoneNumberId,
+  segredoDoAppDaUnidade,
+  tokenDaConta,
+  tokenDeVerificacaoConhecido,
+  unidadesDasContas,
+} from "../config/plataforma.js";
 import { baixarMidia } from "../meta/graph.js";
 import { salvarBuffer } from "../media/armazenamento.js";
 import { pedirSugestaoIa } from "../queue.js";
@@ -102,7 +109,7 @@ const payloadSchema = z.object({
 
 type MensagemRecebida = NonNullable<
   z.infer<typeof payloadSchema>["entry"][number]["changes"][number]["value"]["messages"]
->[number] & { numeroId?: number; contaId?: number };
+>[number] & { numeroId?: number; contaId?: number; unidadeId?: number };
 
 interface ConteudoMensagem {
   tipo: TipoMensagem;
@@ -151,12 +158,14 @@ async function registrarContato(db: Db, telefone: string, nomePerfil: string): P
 }
 
 // A IA liga sozinha quando um cliente nosso escreve, para o atendimento seguir sem esperar a equipe. Ela
-// só fica parada quando: alguém da equipe desligou à mão nesta conversa (iaDesligadaManual), ou o cliente
-// pediu uma pessoa / o bot não soube responder (precisaHumano — até "Marcar como resolvida").
+// só fica parada quando: alguém da equipe desligou à mão nesta conversa (iaDesligadaManual), o cliente
+// pediu uma pessoa / o bot não soube responder (precisaHumano), ou um funcionário está com o atendimento
+// aberto (atendenteId) — até "Encerrar atendimento".
 async function acionarAgenteSeLigado(
   db: Db,
   telefone: string,
   numeroId: number,
+  unidadeId: number,
   conteudo: ConteudoMensagem,
   nomePerfil: string | undefined,
 ): Promise<void> {
@@ -165,6 +174,7 @@ async function acionarAgenteSeLigado(
       iaAtiva: conversasConfig.iaAtiva,
       iaDesligadaManual: conversasConfig.iaDesligadaManual,
       precisaHumano: conversasConfig.precisaHumano,
+      atendenteId: conversasConfig.atendenteId,
     })
     .from(conversasConfig)
     .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
@@ -178,9 +188,9 @@ async function acionarAgenteSeLigado(
       .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
   }
 
-  if (existente?.iaDesligadaManual || existente?.precisaHumano) return;
+  if (existente?.iaDesligadaManual || existente?.precisaHumano || existente?.atendenteId) return;
 
-  const { modo, webhookN8nUrl } = await configuracaoDoAgente(db);
+  const { modo, webhookN8nUrl } = await configuracaoDoAgente(db, unidadeId);
 
   // Modo n8n: a plataforma só avisa que chegou mensagem nova; quem decide o que responder (e responde,
   // via POST /integracoes/mensagens) é o fluxo do n8n. Sem rascunho aqui — essa é a diferença combinada
@@ -199,6 +209,7 @@ async function acionarAgenteSeLigado(
         body: JSON.stringify({
           telefone,
           numeroId,
+          unidadeId,
           nomeCliente: nomePerfil ?? null,
           mensagem: {
             tipo: conteudo.tipo,
@@ -317,9 +328,15 @@ async function registrarResposta(
 
 // A Meta avisa aqui o resultado da análise de cada template (e quando ela pausa ou desativa um já aprovado).
 // O evento traz o id do template na Meta; templates importados antes de guardarmos esse id são achados
-// pelo nome + idioma dentro da conta (entry.id é o WABA).
-async function registrarStatusDeTemplates(db: Db, entradas: z.infer<typeof payloadSchema>["entry"]): Promise<void> {
+// pelo nome + idioma dentro da conta (entry.id é o WABA). Só mexe nos templates da unidade dona da conta.
+async function registrarStatusDeTemplates(
+  db: Db,
+  entradas: z.infer<typeof payloadSchema>["entry"],
+  unidadePorWaba: Map<string, number>,
+): Promise<void> {
   for (const entrada of entradas) {
+    const unidadeId = entrada.id ? unidadePorWaba.get(entrada.id) : undefined;
+    if (unidadeId === undefined) continue;
     for (const mudanca of entrada.changes) {
       const valor = mudanca.value;
       if (mudanca.field !== "message_template_status_update" || !valor.event) continue;
@@ -333,11 +350,14 @@ async function registrarStatusDeTemplates(db: Db, entradas: z.infer<typeof paylo
         const resultado = await db
           .update(templatesWhatsapp)
           .set(alteracao)
-          .where(eq(templatesWhatsapp.metaId, String(valor.message_template_id)));
+          .where(and(eq(templatesWhatsapp.unidadeId, unidadeId), eq(templatesWhatsapp.metaId, String(valor.message_template_id))));
         atualizados = resultado.count;
       }
       if (atualizados === 0 && valor.message_template_name && entrada.id) {
-        const [conta] = await db.select({ id: contasWhatsapp.id }).from(contasWhatsapp).where(eq(contasWhatsapp.wabaId, entrada.id));
+        const [conta] = await db
+          .select({ id: contasWhatsapp.id })
+          .from(contasWhatsapp)
+          .where(and(eq(contasWhatsapp.wabaId, entrada.id), eq(contasWhatsapp.unidadeId, unidadeId)));
         if (conta) {
           const resultado = await db
             .update(templatesWhatsapp)
@@ -371,10 +391,10 @@ export function criarWebhookWhatsapp(): Router {
     }),
   );
 
-  // Verificação inicial exigida pela Meta ao cadastrar o webhook.
+  // Verificação inicial exigida pela Meta ao cadastrar o webhook: vale o token de qualquer unidade.
   router.get("/", async (req, res) => {
-    const { verifyToken: tokenEsperado } = await configuracaoDoWebhook(getDb());
-    const tokenValido = tokenEsperado !== null && req.query["hub.verify_token"] === tokenEsperado;
+    const tokenRecebido = req.query["hub.verify_token"];
+    const tokenValido = typeof tokenRecebido === "string" && tokenRecebido !== "" && (await tokenDeVerificacaoConhecido(getDb(), tokenRecebido));
 
     if (req.query["hub.mode"] === "subscribe" && tokenValido) {
       console.log("[webhook-whatsapp] verificação da Meta aceita");
@@ -383,26 +403,13 @@ export function criarWebhookWhatsapp(): Router {
     }
 
     console.warn(
-      `[webhook-whatsapp] verificação recusada (mode=${String(req.query["hub.mode"])}, token ${tokenEsperado === null ? "não configurado no painel" : tokenValido ? "ok" : "não confere"})`,
+      `[webhook-whatsapp] verificação recusada (mode=${String(req.query["hub.mode"])}, token ${tokenValido ? "ok" : "não confere com o de nenhuma unidade"})`,
     );
     res.sendStatus(403);
   });
 
   router.post("/", async (req: RequisicaoComCorpoBruto, res) => {
     const db = getDb();
-    const { appSecret: segredo } = await configuracaoDoWebhook(db);
-
-    if (segredo) {
-      if (!assinaturaValida(req, segredo)) {
-        res.sendStatus(401);
-        return;
-      }
-    } else if (process.env.NODE_ENV === "production") {
-      // Sem o segredo não dá para autenticar quem chama; em produção é melhor recusar do que gravar qualquer coisa.
-      console.error("[webhook-whatsapp] segredo do app não configurado no painel; requisição recusada");
-      res.sendStatus(503);
-      return;
-    }
 
     const payload = payloadSchema.safeParse(req.body);
     if (!payload.success) {
@@ -410,23 +417,48 @@ export function criarWebhookWhatsapp(): Router {
       return;
     }
 
+    // Cada unidade cadastra a própria conta e o segredo do app dela: a assinatura é conferida com o segredo
+    // da unidade dona de cada conta citada no evento, e só o que é dessas unidades segue adiante.
+    const unidadePorWaba = await unidadesDasContas(
+      db,
+      payload.data.entry.flatMap((entrada) => (entrada.id ? [entrada.id] : [])),
+    );
+    const autorizadas = new Set<number>();
+    for (const unidadeId of new Set(unidadePorWaba.values())) {
+      const segredo = await segredoDoAppDaUnidade(db, unidadeId);
+      // Sem segredo não dá para autenticar quem chama: em produção recusa; em desenvolvimento aceita.
+      if (segredo ? assinaturaValida(req, segredo) : process.env.NODE_ENV !== "production") autorizadas.add(unidadeId);
+      else if (!segredo) console.error(`[webhook-whatsapp] unidade ${unidadeId} sem segredo do app no painel; evento recusado`);
+    }
+    if (unidadePorWaba.size > 0 && autorizadas.size === 0) {
+      res.sendStatus(401);
+      return;
+    }
+    for (const [wabaId, unidadeId] of unidadePorWaba) if (!autorizadas.has(unidadeId)) unidadePorWaba.delete(wabaId);
+
     try {
-      await registrarStatusDeTemplates(db, payload.data.entry);
+      await registrarStatusDeTemplates(db, payload.data.entry, unidadePorWaba);
 
       // Cada evento traz o número de destino; só seguem os que são de um número ativo da plataforma.
       const mudancas: Array<{
         valor: (typeof payload.data.entry)[number]["changes"][number]["value"];
         numeroId: number;
         contaId: number;
+        unidadeId: number;
       }> = [];
       const descartados = new Set<string>();
 
-      for (const mudanca of payload.data.entry.flatMap((entrada) => entrada.changes)) {
-        if (mudanca.field === "message_template_status_update") continue;
-        const phoneNumberId = mudanca.value.metadata?.phone_number_id;
-        const numero = phoneNumberId ? await numeroPeloPhoneNumberId(db, phoneNumberId) : null;
-        if (numero) mudancas.push({ valor: mudanca.value, numeroId: numero.id, contaId: numero.contaId });
-        else descartados.add(phoneNumberId ?? "sem número");
+      for (const entrada of payload.data.entry) {
+        const unidadeDaEntrada = entrada.id ? unidadePorWaba.get(entrada.id) : undefined;
+        for (const mudanca of entrada.changes) {
+          if (mudanca.field === "message_template_status_update") continue;
+          const phoneNumberId = mudanca.value.metadata?.phone_number_id;
+          const numero = phoneNumberId ? await numeroPeloPhoneNumberId(db, phoneNumberId) : null;
+          // O número precisa ser da mesma unidade cuja assinatura conferiu.
+          if (numero && numero.unidadeId === unidadeDaEntrada) {
+            mudancas.push({ valor: mudanca.value, numeroId: numero.id, contaId: numero.contaId, unidadeId: numero.unidadeId });
+          } else descartados.add(phoneNumberId ?? "sem número");
+        }
       }
 
       if (descartados.size > 0) {
@@ -438,7 +470,7 @@ export function criarWebhookWhatsapp(): Router {
       }
 
       const mensagens = mudancas.flatMap((mudanca) =>
-        (mudanca.valor.messages ?? []).map((m) => ({ ...m, numeroId: mudanca.numeroId, contaId: mudanca.contaId })),
+        (mudanca.valor.messages ?? []).map((m) => ({ ...m, numeroId: mudanca.numeroId, contaId: mudanca.contaId, unidadeId: mudanca.unidadeId })),
       );
       console.log(`[webhook-whatsapp] recebido: ${mensagens.length} mensagem(ns)`);
 
@@ -491,7 +523,7 @@ export function criarWebhookWhatsapp(): Router {
         const { telefone } = registro;
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
-        await acionarAgenteSeLigado(db, telefone, mensagem.numeroId, conteudo, nomePerfil);
+        await acionarAgenteSeLigado(db, telefone, mensagem.numeroId, mensagem.unidadeId, conteudo, nomePerfil);
       }
       res.sendStatus(200);
     } catch (erro) {

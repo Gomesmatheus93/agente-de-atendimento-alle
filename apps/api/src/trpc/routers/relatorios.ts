@@ -3,7 +3,7 @@ import { calcularCusto, resumoDashboardInputSchema } from "@atendimento-academia
 import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { chaveDia, DIA_MS, diasAtras } from "../periodo.js";
 import { carregarProgresso, carregarRespondentes, precoUnitarioDe, progressoVazio, taxa } from "../progresso.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 const MAX_CAMPANHAS_NA_TABELA = 50;
 // Janela usada para estimar a taxa de resposta esperada de uma campanha nova.
@@ -42,7 +42,7 @@ function porTaxaDesc<T extends { taxaRetorno: number | null; enviados: number }>
 }
 
 export const relatoriosRouter = router({
-  performance: procedimentoAutenticado.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
+  performance: procedimentoUnidade.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
     const { dias } = input;
     const agora = Date.now();
 
@@ -61,7 +61,13 @@ export const relatoriosRouter = router({
       })
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
-      .where(and(ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, new Date(agora - (2 * dias + 1) * DIA_MS))))
+      .where(
+        and(
+          eq(campanhasDisparo.unidadeId, ctx.unidadeId),
+          ne(campanhasDisparo.status, "agendada"),
+          gte(campanhasDisparo.disparoEm, new Date(agora - (2 * dias + 1) * DIA_MS)),
+        ),
+      )
       .orderBy(desc(campanhasDisparo.disparoEm), desc(campanhasDisparo.id));
 
     const ids = campanhas.map((campanha) => campanha.id);
@@ -118,11 +124,17 @@ export const relatoriosRouter = router({
   }),
 
   // Taxa de resposta média das campanhas recentes, usada para estimar o retorno de uma campanha nova.
-  taxaRespostaMedia: procedimentoAutenticado.query(async ({ ctx }) => {
+  taxaRespostaMedia: procedimentoUnidade.query(async ({ ctx }) => {
     const campanhas = await ctx.db
       .select({ id: campanhasDisparo.id })
       .from(campanhasDisparo)
-      .where(and(ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, new Date(Date.now() - JANELA_HISTORICO_DIAS * DIA_MS))))
+      .where(
+        and(
+          eq(campanhasDisparo.unidadeId, ctx.unidadeId),
+          ne(campanhasDisparo.status, "agendada"),
+          gte(campanhasDisparo.disparoEm, new Date(Date.now() - JANELA_HISTORICO_DIAS * DIA_MS)),
+        ),
+      )
       .orderBy(desc(campanhasDisparo.id))
       .limit(MAX_CAMPANHAS_NO_HISTORICO);
 

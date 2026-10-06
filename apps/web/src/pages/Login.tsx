@@ -34,7 +34,7 @@ export function Login({ primeiroAcesso, onEntrou }: { primeiroAcesso: boolean; o
             <h1 className="font-heading text-xl font-bold text-ink">{primeiroAcesso ? "Crie o primeiro acesso" : "Entrar"}</h1>
             <p className="mt-1 text-sm text-ink-2">
               {primeiroAcesso
-                ? "Ninguém entrou ainda. Quem começa vira administrador."
+                ? "Ninguém entrou ainda. Quem começa vira o superadmin, que cria as unidades."
                 : "Allp Chat"}
             </p>
           </div>

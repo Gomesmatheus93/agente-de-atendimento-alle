@@ -9,6 +9,11 @@ import {
   sugestoesIa,
   templatesWhatsapp,
   conversasExcluidas,
+  assumirAtendimento,
+  devolverParaFila,
+  doNumeroDaUnidade,
+  encerrarAtendimento,
+  usuarios,
 } from "@atendimento-academias/db";
 import {
   definirIaInputSchema,
@@ -34,11 +39,12 @@ import {
   enviarMensagem,
   excluirConversa,
   garantirJanelaAberta,
+  garantirNumeroDaUnidade,
   marcarComoRespondida,
   obterConversa,
   ultimaMensagemDoCliente,
 } from "../../servicos/conversas.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 // Curingas do LIKE digitados pelo usuário viram texto comum.
 function escaparLike(texto: string): string {
@@ -64,7 +70,7 @@ export const conversasRouter = router({
   // Uma conversa por telefone que recebeu um disparo ou nos escreveu, da mais recente para a mais antiga.
   // Cada fonte é limitada por recência: juntar as mais recentes de cada uma e cortar de novo dá o mesmo
   // resultado de ordenar tudo junto, sem carregar a base inteira.
-  listar: procedimentoAutenticado.input(listarConversasInputSchema).query(async ({ ctx, input }) => {
+  listar: procedimentoUnidade.input(listarConversasInputSchema).query(async ({ ctx, input }) => {
     const busca = input.busca?.trim();
     const padrao = busca ? `%${escaparLike(busca)}%` : null;
     const digitos = busca ? busca.replace(/\D/g, "") : "";
@@ -96,7 +102,12 @@ export const conversasRouter = router({
       ctx.db
         .select({ telefone: respostasClientes.telefone, numeroId: respostasClientes.numeroId, em: ultimaRecebidaEm })
         .from(respostasClientes)
-        .where(filtroDeBusca(respostasClientes.telefone, padrao ? ilike(respostasClientes.texto, padrao) : undefined))
+        .where(
+          and(
+            doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId),
+            filtroDeBusca(respostasClientes.telefone, padrao ? ilike(respostasClientes.texto, padrao) : undefined),
+          ),
+        )
         .groupBy(respostasClientes.telefone, respostasClientes.numeroId)
         .orderBy(desc(ultimaRecebidaEm))
         .limit(input.limite),
@@ -106,6 +117,7 @@ export const conversasRouter = router({
         .innerJoin(campanhasDisparo, eq(campanhasDisparo.id, disparoDestinatarios.campanhaId))
         .where(
           and(
+            eq(campanhasDisparo.unidadeId, ctx.unidadeId),
             eq(disparoDestinatarios.statusEnvio, "enviado"),
             isNotNull(disparoDestinatarios.enviadoEm),
             filtroDeBusca(disparoDestinatarios.telefone),
@@ -117,7 +129,12 @@ export const conversasRouter = router({
       ctx.db
         .select({ telefone: mensagensSaida.telefone, numeroId: mensagensSaida.numeroId, em: ultimaSaidaEm })
         .from(mensagensSaida)
-        .where(filtroDeBusca(mensagensSaida.telefone, padrao ? ilike(mensagensSaida.texto, padrao) : undefined))
+        .where(
+          and(
+            doNumeroDaUnidade(mensagensSaida.numeroId, ctx.unidadeId),
+            filtroDeBusca(mensagensSaida.telefone, padrao ? ilike(mensagensSaida.texto, padrao) : undefined),
+          ),
+        )
         .groupBy(mensagensSaida.telefone, mensagensSaida.numeroId)
         .orderBy(desc(ultimaSaidaEm))
         .limit(input.limite),
@@ -134,7 +151,10 @@ export const conversasRouter = router({
     }
 
     // Conversa excluída só volta à lista se tiver acontecido algo depois da exclusão.
-    const exclusoes = await ctx.db.select().from(conversasExcluidas);
+    const exclusoes = await ctx.db
+      .select()
+      .from(conversasExcluidas)
+      .where(doNumeroDaUnidade(conversasExcluidas.numeroId, ctx.unidadeId));
     const excluidaEm = new Map(exclusoes.map((linha) => [chaveDaConversa(linha.numeroId, linha.telefone), linha.excluidaEm]));
     const ordenadas = [...atividade.entries()]
       .filter(([chave, conversa]) => {
@@ -152,7 +172,7 @@ export const conversasRouter = router({
       ctx.db
         .select({ telefone: respostasClientes.telefone, numeroId: respostasClientes.numeroId, naoLidas: naoLidasEm, total: count() })
         .from(respostasClientes)
-        .where(inArray(respostasClientes.telefone, telefones))
+        .where(and(inArray(respostasClientes.telefone, telefones), doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId)))
         .groupBy(respostasClientes.telefone, respostasClientes.numeroId),
       ctx.db
         .select({
@@ -163,7 +183,7 @@ export const conversasRouter = router({
           em: respostasClientes.recebidaEm,
         })
         .from(respostasClientes)
-        .where(inArray(respostasClientes.telefone, telefones))
+        .where(and(inArray(respostasClientes.telefone, telefones), doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId)))
         .orderBy(desc(respostasClientes.recebidaEm), desc(respostasClientes.id)),
       ctx.db
         .select({
@@ -176,7 +196,13 @@ export const conversasRouter = router({
         .from(disparoDestinatarios)
         .innerJoin(campanhasDisparo, eq(campanhasDisparo.id, disparoDestinatarios.campanhaId))
         .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
-        .where(and(inArray(disparoDestinatarios.telefone, telefones), eq(disparoDestinatarios.statusEnvio, "enviado")))
+        .where(
+          and(
+            inArray(disparoDestinatarios.telefone, telefones),
+            eq(campanhasDisparo.unidadeId, ctx.unidadeId),
+            eq(disparoDestinatarios.statusEnvio, "enviado"),
+          ),
+        )
         .orderBy(desc(disparoDestinatarios.enviadoEm), desc(disparoDestinatarios.id)),
       ctx.db
         .select({
@@ -187,7 +213,7 @@ export const conversasRouter = router({
           em: mensagensSaida.createdAt,
         })
         .from(mensagensSaida)
-        .where(inArray(mensagensSaida.telefone, telefones))
+        .where(and(inArray(mensagensSaida.telefone, telefones), doNumeroDaUnidade(mensagensSaida.numeroId, ctx.unidadeId)))
         .orderBy(desc(mensagensSaida.createdAt), desc(mensagensSaida.id)),
       ctx.db
         .select({
@@ -195,14 +221,19 @@ export const conversasRouter = router({
           numeroId: conversasConfig.numeroId,
           iaAtiva: conversasConfig.iaAtiva,
           precisaHumano: conversasConfig.precisaHumano,
+          atendenteNome: usuarios.nome,
         })
         .from(conversasConfig)
-        .where(inArray(conversasConfig.telefone, telefones)),
+        .leftJoin(usuarios, eq(usuarios.id, conversasConfig.atendenteId))
+        .where(and(inArray(conversasConfig.telefone, telefones), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId))),
       ctx.db
         .select({ telefone: contatos.telefone, nomePerfil: contatos.nomePerfil })
         .from(contatos)
         .where(inArray(contatos.telefone, telefones)),
-      ctx.db.select({ id: numerosWhatsapp.id, exibicao: numerosWhatsapp.numeroExibicao }).from(numerosWhatsapp),
+      ctx.db
+        .select({ id: numerosWhatsapp.id, exibicao: numerosWhatsapp.numeroExibicao })
+        .from(numerosWhatsapp)
+        .where(eq(numerosWhatsapp.unidadeId, ctx.unidadeId)),
     ]);
 
     const exibicaoDoNumero = new Map(numeros.map((numero) => [numero.id, numero.exibicao]));
@@ -258,6 +289,7 @@ export const conversasRouter = router({
         ultimaMensagem: previa,
         iaAtiva: configPorConversa.get(chave)?.iaAtiva ?? false,
         precisaHumano: configPorConversa.get(chave)?.precisaHumano ?? false,
+        atendenteNome: configPorConversa.get(chave)?.atendenteNome ?? null,
         ultimaEm: ultimaEm.toISOString(),
         naoLidas: Number(contagem?.naoLidas ?? 0),
         total: Number(contagem?.total ?? 0),
@@ -268,20 +300,27 @@ export const conversasRouter = router({
   }),
   // A conversa reúne o que o cliente escreveu, os disparos que enviamos (template já preenchido)
   // e as respostas da equipe, em ordem de horário. Mesma consulta usada pela API de integração.
-  detalhe: procedimentoAutenticado
-    .input(detalheConversaInputSchema)
-    .query(async ({ ctx, input }) => obterConversa(ctx.db, input.telefone, input.numeroId)),
+  detalhe: procedimentoUnidade.input(detalheConversaInputSchema).query(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    return obterConversa(ctx.db, input.telefone, input.numeroId);
+  }),
 
-  excluir: procedimentoAutenticado.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {
+  excluir: procedimentoUnidade.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     await excluirConversa(ctx.db, input.telefone, input.numeroId);
     return { ok: true };
   }),
 
   // A resposta é gravada como pendente e enviada em segundo plano pelo worker; a tela acompanha o status.
-  enviarResposta: procedimentoAutenticado.input(enviarRespostaInputSchema).mutation(async ({ ctx, input }) => enviarMensagem(ctx.db, input)),
+  // Quem responde à mão uma conversa sem atendente passa a ser o atendente dela (fica ocupado na fila).
+  enviarResposta: procedimentoUnidade.input(enviarRespostaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    return enviarMensagem(ctx.db, input, ctx.usuario.id);
+  }),
 
   // Nota de voz gravada no painel: grava o arquivo em disco e enfileira igual a uma resposta de texto.
-  enviarAudio: procedimentoAutenticado.input(enviarAudioInputSchema).mutation(async ({ ctx, input }) => {
+  enviarAudio: procedimentoUnidade.input(enviarAudioInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     garantirJanelaAberta(await ultimaMensagemDoCliente(ctx.db, input.telefone, input.numeroId));
 
     const salvo = await salvarBase64(input.audioBase64, input.mimeType);
@@ -300,12 +339,16 @@ export const conversasRouter = router({
 
     await enfileirarResposta(ctx.db, id, 1);
     await marcarComoRespondida(ctx.db, input.telefone, input.numeroId);
+    await assumirAtendimento(ctx.db, input.telefone, input.numeroId, ctx.usuario.id);
 
     return { id };
   }),
 
-  reenviarResposta: procedimentoAutenticado.input(reenviarRespostaInputSchema).mutation(async ({ ctx, input }) => {
-    const [mensagem] = await ctx.db.select().from(mensagensSaida).where(eq(mensagensSaida.id, input.id));
+  reenviarResposta: procedimentoUnidade.input(reenviarRespostaInputSchema).mutation(async ({ ctx, input }) => {
+    const [mensagem] = await ctx.db
+      .select()
+      .from(mensagensSaida)
+      .where(and(eq(mensagensSaida.id, input.id), doNumeroDaUnidade(mensagensSaida.numeroId, ctx.unidadeId)));
 
     if (!mensagem) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada" });
@@ -331,7 +374,8 @@ export const conversasRouter = router({
 
   // Liga ou desliga a IA nessa conversa. Desligar aqui é "manual": ela não religa sozinha quando o cliente
   // escreve de novo, até alguém ligar aqui de volta. Ao ligar, já sugere uma resposta se o cliente estiver esperando.
-  definirIa: procedimentoAutenticado.input(definirIaInputSchema).mutation(async ({ ctx, input }) => {
+  definirIa: procedimentoUnidade.input(definirIaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     const valores = { iaAtiva: input.ativa, iaDesligadaManual: !input.ativa };
     await ctx.db
       .insert(conversasConfig)
@@ -344,22 +388,23 @@ export const conversasRouter = router({
   }),
 
   // Pede à IA uma sugestão agora, sem esperar o cliente escrever de novo.
-  gerarSugestao: procedimentoAutenticado.input(gerarSugestaoInputSchema).mutation(async ({ input }) => {
+  gerarSugestao: procedimentoUnidade.input(gerarSugestaoInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     await pedirSugestaoIa(input.telefone, input.numeroId);
     return { telefone: input.telefone };
   }),
 
-  descartarSugestao: procedimentoAutenticado.input(sugestaoIaInputSchema).mutation(async ({ ctx, input }) => {
+  descartarSugestao: procedimentoUnidade.input(sugestaoIaInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db
       .update(sugestoesIa)
       .set({ status: "descartada" })
-      .where(and(eq(sugestoesIa.id, input.id), eq(sugestoesIa.status, "pendente")));
+      .where(and(eq(sugestoesIa.id, input.id), eq(sugestoesIa.status, "pendente"), doNumeroDaUnidade(sugestoesIa.numeroId, ctx.unidadeId)));
     return { id: input.id };
   }),
 
   // Conversas esperando uma pessoa (o cliente pediu ou o bot não soube responder): alimenta o aviso que
-  // aparece em qualquer tela do painel. O mais antigo primeiro — é quem está esperando há mais tempo.
-  pedidosDeHumano: procedimentoAutenticado.query(async ({ ctx }) => {
+  // aparece em qualquer tela do painel, com quem da fila ficou com cada uma. O mais antigo primeiro.
+  pedidosDeHumano: procedimentoUnidade.query(async ({ ctx }) => {
     const pedidos = await ctx.db
       .select({
         telefone: conversasConfig.telefone,
@@ -367,9 +412,12 @@ export const conversasRouter = router({
         motivo: conversasConfig.motivoHumano,
         desde: conversasConfig.humanoPedidoEm,
         atualizadoEm: conversasConfig.updatedAt,
+        atendenteId: conversasConfig.atendenteId,
+        atendenteNome: usuarios.nome,
       })
       .from(conversasConfig)
-      .where(eq(conversasConfig.precisaHumano, true))
+      .leftJoin(usuarios, eq(usuarios.id, conversasConfig.atendenteId))
+      .where(and(eq(conversasConfig.precisaHumano, true), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId)))
       .limit(50);
     if (pedidos.length === 0) return [];
 
@@ -385,22 +433,30 @@ export const conversasRouter = router({
         numeroId: pedido.numeroId,
         nome: nomePorTelefone.get(pedido.telefone) ?? null,
         motivo: pedido.motivo,
+        atendente: pedido.atendenteId && pedido.atendenteNome ? { id: pedido.atendenteId, nome: pedido.atendenteNome } : null,
+        paraMim: pedido.atendenteId === ctx.usuario.id,
         // Pedidos de antes deste campo existir usam a última alteração da conversa.
         desde: (pedido.desde ?? pedido.atualizadoEm).toISOString(),
       }))
       .sort((a, b) => a.desde.localeCompare(b.desde));
   }),
 
-  // A equipe assumiu a conversa que a IA passou adiante; ela volta a sugerir nas próximas mensagens.
-  resolverHumano: procedimentoAutenticado.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
-    await ctx.db
-      .update(conversasConfig)
-      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null })
-      .where(and(eq(conversasConfig.telefone, input.telefone), eq(conversasConfig.numeroId, input.numeroId)));
+  // "Encerrar atendimento": a conversa volta para o bot e o atendente fica livre para o próximo da fila.
+  resolverHumano: procedimentoUnidade.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    await encerrarAtendimento(ctx.db, input.telefone, input.numeroId);
     return { telefone: input.telefone };
   }),
 
-  marcarComoLida: procedimentoAutenticado.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {
+  // O atendente precisou sair: o cliente volta para a fila (sem perder a vez) e vai para o próximo livre.
+  devolverParaFila: procedimentoUnidade.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    await devolverParaFila(ctx.db, input.telefone, input.numeroId);
+    return { telefone: input.telefone };
+  }),
+
+  marcarComoLida: procedimentoUnidade.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     await ctx.db
       .update(respostasClientes)
       .set({ lidaEm: new Date() })
@@ -418,7 +474,8 @@ export const conversasRouter = router({
   // "Marcar como não lida": destrava de novo a última mensagem do cliente. O contador de não lidas e a
   // ordenação da lista de conversas já são derivados de respostas_clientes.lida_em, então isso basta
   // para a conversa voltar a aparecer como não lida, sem precisar de uma coluna à parte.
-  marcarComoNaoLida: procedimentoAutenticado.input(marcarComoNaoLidaInputSchema).mutation(async ({ ctx, input }) => {
+  marcarComoNaoLida: procedimentoUnidade.input(marcarComoNaoLidaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     const [ultima] = await ctx.db
       .select({ id: respostasClientes.id })
       .from(respostasClientes)
@@ -434,11 +491,11 @@ export const conversasRouter = router({
   }),
 
   // Alimenta o contador do menu lateral.
-  contarNaoLidas: procedimentoAutenticado.query(async ({ ctx }) => {
+  contarNaoLidas: procedimentoUnidade.query(async ({ ctx }) => {
     const [linha] = await ctx.db
       .select({ conversas: countDistinct(respostasClientes.telefone), mensagens: count() })
       .from(respostasClientes)
-      .where(isNull(respostasClientes.lidaEm));
+      .where(and(isNull(respostasClientes.lidaEm), doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId)));
 
     return { conversas: linha?.conversas ?? 0, mensagens: linha?.mensagens ?? 0 };
   }),

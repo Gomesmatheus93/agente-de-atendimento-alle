@@ -2,16 +2,17 @@ import { criarCampanhaInputSchema, detalheConversaInputSchema, enviarRespostaInp
 import { TRPCError } from "@trpc/server";
 import express, { type Router } from "express";
 import { z } from "zod";
-import { chaveIntegracaoValida } from "../config/plataforma.js";
+import { unidadeDaChaveIntegracao } from "../config/plataforma.js";
 import { criarCampanha } from "../servicos/campanhas.js";
-import { enviarMensagem, obterConversa, passarParaHumano } from "../servicos/conversas.js";
+import { enviarMensagem, garantirNumeroDaUnidade, obterConversa, passarParaHumano } from "../servicos/conversas.js";
 import { getDb } from "../trpc/context.js";
 import { midiasAgente } from "@atendimento-academias/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 // API para automação externa (n8n, Zapier, um script...) disparar campanha sem passar pela tela.
 // Fica no servidor do webhook (público) porque quem chama não roda na mesma máquina; a única porta
-// de entrada é essa chave — não há cookie de sessão nem CORS aqui.
+// de entrada é essa chave — não há cookie de sessão nem CORS aqui. Cada unidade gera a sua, e a chave só
+// alcança os números, templates e imagens daquela unidade.
 const CODIGO_HTTP: Partial<Record<string, number>> = {
   BAD_REQUEST: 400,
   NOT_FOUND: 404,
@@ -27,11 +28,12 @@ export function criarRouterIntegracoes(): Router {
     const cabecalho = req.header("authorization") ?? "";
     const chave = cabecalho.startsWith("Bearer ") ? cabecalho.slice("Bearer ".length).trim() : null;
 
-    const valida = await chaveIntegracaoValida(getDb(), chave);
-    if (!valida) {
+    const unidadeId = await unidadeDaChaveIntegracao(getDb(), chave);
+    if (unidadeId === null) {
       res.status(401).json({ error: "Chave de integração ausente ou inválida (header Authorization: Bearer <chave>)." });
       return;
     }
+    res.locals.unidadeId = unidadeId;
     next();
   });
 
@@ -45,7 +47,7 @@ export function criarRouterIntegracoes(): Router {
     }
 
     try {
-      const resultado = await criarCampanha(getDb(), entrada.data);
+      const resultado = await criarCampanha(getDb(), entrada.data, res.locals.unidadeId as number);
       res.status(201).json(resultado);
     } catch (erro) {
       if (erro instanceof TRPCError) {
@@ -70,6 +72,7 @@ export function criarRouterIntegracoes(): Router {
     }
 
     try {
+      await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, res.locals.unidadeId as number);
       const conversa = await obterConversa(getDb(), entrada.data.telefone, entrada.data.numeroId);
       res.status(200).json(conversa);
     } catch (erro) {
@@ -96,10 +99,15 @@ export function criarRouterIntegracoes(): Router {
     }
 
     try {
+      const unidadeId = res.locals.unidadeId as number;
+      await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, unidadeId);
       const { imagem: nomeDaImagem, ...mensagem } = entrada.data;
       let imagem: { midiaUrl: string; mimeType: string } | undefined;
       if (nomeDaImagem) {
-        const [midia] = await getDb().select().from(midiasAgente).where(eq(midiasAgente.chave, nomeDaImagem));
+        const [midia] = await getDb()
+          .select()
+          .from(midiasAgente)
+          .where(and(eq(midiasAgente.unidadeId, unidadeId), eq(midiasAgente.chave, nomeDaImagem)));
         if (!midia) {
           res.status(400).json({ error: `Imagem "${nomeDaImagem}" não cadastrada (Configurações → Imagens do agente).` });
           return;
@@ -119,7 +127,8 @@ export function criarRouterIntegracoes(): Router {
   });
 
   // O bot decidiu que precisa de uma pessoa: mesmo efeito do botão "Pedir humano" — a conversa ganha
-  // o selo "Humano" em Conversas e para de receber resposta automática até alguém marcar como resolvida.
+  // o selo "Humano" em Conversas, entra na fila de atendimento e para de receber resposta automática até
+  // alguém encerrar o atendimento.
   router.post("/conversas/humano", async (req, res) => {
     const entrada = detalheConversaInputSchema
       .extend({ motivo: z.string().trim().min(1).max(500) })
@@ -129,8 +138,18 @@ export function criarRouterIntegracoes(): Router {
       return;
     }
 
-    await passarParaHumano(getDb(), entrada.data.telefone, entrada.data.numeroId, entrada.data.motivo);
-    res.status(200).json({ ok: true });
+    try {
+      await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, res.locals.unidadeId as number);
+      await passarParaHumano(getDb(), entrada.data.telefone, entrada.data.numeroId, entrada.data.motivo);
+      res.status(200).json({ ok: true });
+    } catch (erro) {
+      if (erro instanceof TRPCError) {
+        res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
+        return;
+      }
+      console.error("[integracoes] falha ao passar para humano:", erro);
+      res.status(500).json({ error: "Falha inesperada ao passar para humano" });
+    }
   });
 
   return router;

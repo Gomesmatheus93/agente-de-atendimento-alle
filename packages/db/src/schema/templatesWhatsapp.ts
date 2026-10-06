@@ -2,9 +2,13 @@ import { boolean, integer, pgTable, text, varchar } from "drizzle-orm/pg-core";
 import { timestamps } from "./columns.js";
 import { categoriaTemplateEnum } from "./enums.js";
 import { contasWhatsapp } from "./whatsapp.js";
+import { unidades } from "./unidades.js";
 
 export const templatesWhatsapp = pgTable("templates_whatsapp", {
   id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+  unidadeId: integer("unidade_id")
+    .notNull()
+    .references(() => unidades.id, { onDelete: "cascade" }),
   // Conta do WhatsApp onde o template foi aprovado: o mesmo nome pode existir em contas diferentes.
   contaId: integer("conta_id").references(() => contasWhatsapp.id, { onDelete: "cascade" }),
   nome: varchar("nome", { length: 255 }).notNull(),

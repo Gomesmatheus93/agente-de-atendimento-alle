@@ -1,8 +1,8 @@
-import { duvidasIa, respostasClientes } from "@atendimento-academias/db";
+import { doNumeroDaUnidade, duvidasIa, respostasClientes } from "@atendimento-academias/db";
 import { classificarDuvida, resumoDashboardInputSchema, TOPICO_OUTROS } from "@atendimento-academias/shared";
-import { desc, gte } from "drizzle-orm";
+import { and, desc, gte } from "drizzle-orm";
 import { DIA_MS } from "../periodo.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 const MAX_RESPOSTAS_ANALISADAS = 20_000;
 const MAX_EXEMPLOS = 3;
@@ -21,7 +21,7 @@ function resumirMensagem(texto: string): string {
 }
 
 export const duvidasRouter = router({
-  ranking: procedimentoAutenticado.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
+  ranking: procedimentoUnidade.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
     const { dias } = input;
     const agora = Date.now();
     const inicioAtual = agora - dias * DIA_MS;
@@ -30,7 +30,7 @@ export const duvidasRouter = router({
     const respostas = await ctx.db
       .select({ texto: respostasClientes.texto, recebidaEm: respostasClientes.recebidaEm })
       .from(respostasClientes)
-      .where(gte(respostasClientes.recebidaEm, new Date(inicioAnterior)))
+      .where(and(doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId), gte(respostasClientes.recebidaEm, new Date(inicioAnterior))))
       .orderBy(desc(respostasClientes.recebidaEm))
       .limit(MAX_RESPOSTAS_ANALISADAS);
 
@@ -81,7 +81,7 @@ export const duvidasRouter = router({
 
   // Ranking a partir da análise diária da IA (duvidas_ia): temas agrupados pelo assunto de verdade, não
   // por palavra-chave, e com quantas vezes o agente não soube responder — o que falta no script dele.
-  rankingIa: procedimentoAutenticado.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
+  rankingIa: procedimentoUnidade.input(resumoDashboardInputSchema).query(async ({ ctx, input }) => {
     const { dias } = input;
     const agora = Date.now();
     const inicioAtual = agora - dias * DIA_MS;
@@ -90,7 +90,7 @@ export const duvidasRouter = router({
     const linhas = await ctx.db
       .select()
       .from(duvidasIa)
-      .where(gte(duvidasIa.perguntadaEm, new Date(inicioAnterior)))
+      .where(and(doNumeroDaUnidade(duvidasIa.numeroId, ctx.unidadeId), gte(duvidasIa.perguntadaEm, new Date(inicioAnterior))))
       .orderBy(desc(duvidasIa.perguntadaEm))
       .limit(MAX_RESPOSTAS_ANALISADAS);
 

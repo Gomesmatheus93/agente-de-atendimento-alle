@@ -1,6 +1,7 @@
 import {
   campanhasDisparo,
   conversasConfig,
+  doNumeroDaUnidade,
   disparoDestinatarios,
   mensagensSaida,
   respostasClientes,
@@ -11,7 +12,7 @@ import { resumoVisaoInputSchema, type ResumoVisaoInput } from "@atendimento-acad
 import { and, asc, count, countDistinct, desc, eq, gte, inArray, isNull, lt, max, min, ne } from "drizzle-orm";
 import { chaveDia, diasEntre, inicioDoDia, somarDias } from "../periodo.js";
 import { carregarProgresso, carregarRespondentes, progressoVazio, taxa, type ProgressoPorStatus } from "../progresso.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoUnidade, router } from "../trpc.js";
 
 const MINUTO_MS = 60_000;
 const JANELA_RESPOSTA_MS = 24 * 60 * MINUTO_MS;
@@ -83,14 +84,17 @@ function somar(alvo: Totais, progresso: ProgressoPorStatus) {
 }
 
 export const dashboardRouter = router({
-  resumo: procedimentoAutenticado.input(resumoVisaoInputSchema).query(async ({ ctx, input }) => {
+  resumo: procedimentoUnidade.input(resumoVisaoInputSchema).query(async ({ ctx, input }) => {
     const agora = Date.now();
     const hoje = chaveDia(new Date(agora));
 
     // "Todo período" começa no primeiro disparo que já aconteceu.
     const [primeiro] =
       input.periodo === "tudo"
-        ? await ctx.db.select({ em: min(campanhasDisparo.disparoEm) }).from(campanhasDisparo).where(ne(campanhasDisparo.status, "agendada"))
+        ? await ctx.db
+            .select({ em: min(campanhasDisparo.disparoEm) })
+            .from(campanhasDisparo)
+            .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), ne(campanhasDisparo.status, "agendada")))
         : [{ em: null }];
     const periodo = resolverPeriodo(input, hoje, primeiro?.em ? chaveDia(new Date(primeiro.em)) : null);
     const dias = periodo.atual.length;
@@ -116,7 +120,12 @@ export const dashboardRouter = router({
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
       // Campanha agendada ainda não disparou: não entra nos números de envio.
       .where(
-        and(ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, desde), lt(campanhasDisparo.disparoEm, ate)),
+        and(
+          eq(campanhasDisparo.unidadeId, ctx.unidadeId),
+          ne(campanhasDisparo.status, "agendada"),
+          gte(campanhasDisparo.disparoEm, desde),
+          lt(campanhasDisparo.disparoEm, ate),
+        ),
       )
       .orderBy(desc(campanhasDisparo.disparoEm), desc(campanhasDisparo.id));
 
@@ -189,13 +198,14 @@ export const dashboardRouter = router({
     const [{ total: campanhasEmAndamento }] = await ctx.db
       .select({ total: count() })
       .from(campanhasDisparo)
-      .where(eq(campanhasDisparo.status, "enviando"));
+      .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), eq(campanhasDisparo.status, "enviando")));
 
     const paradas = await ctx.db
       .select({ id: campanhasDisparo.id, nome: campanhasDisparo.nome, createdAt: campanhasDisparo.disparoEm })
       .from(campanhasDisparo)
       .where(
         and(
+          eq(campanhasDisparo.unidadeId, ctx.unidadeId),
           eq(campanhasDisparo.status, "enviando"),
           lt(campanhasDisparo.disparoEm, new Date(agora - LIMITE_CAMPANHA_PARADA_MIN * MINUTO_MS)),
         ),
@@ -213,7 +223,7 @@ export const dashboardRouter = router({
       })
       .from(campanhasDisparo)
       .innerJoin(templatesWhatsapp, eq(templatesWhatsapp.id, campanhasDisparo.templateId))
-      .where(eq(campanhasDisparo.status, "agendada"))
+      .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), eq(campanhasDisparo.status, "agendada")))
       .orderBy(asc(campanhasDisparo.disparoEm))
       .limit(MAX_PROXIMOS);
 
@@ -225,32 +235,40 @@ export const dashboardRouter = router({
     const [{ total: totalAgendadas }] = await ctx.db
       .select({ total: count() })
       .from(campanhasDisparo)
-      .where(eq(campanhasDisparo.status, "agendada"));
+      .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), eq(campanhasDisparo.status, "agendada")));
 
     // Conversas com mensagem ainda não lida: atalho para a caixa de entrada.
     const [naoLidas] = await ctx.db
       .select({ conversas: countDistinct(respostasClientes.telefone) })
       .from(respostasClientes)
-      .where(isNull(respostasClientes.lidaEm));
+      .where(and(isNull(respostasClientes.lidaEm), doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId)));
 
     // Conversas em que a última mensagem foi do cliente: são as que esperam alguém responder.
     const [ultimasDoCliente, ultimasSaidas, ultimosDisparos, [pendentesIa], [humanos]] = await Promise.all([
       ctx.db
         .select({ telefone: respostasClientes.telefone, numeroId: respostasClientes.numeroId, em: max(respostasClientes.recebidaEm) })
         .from(respostasClientes)
+        .where(doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId))
         .groupBy(respostasClientes.telefone, respostasClientes.numeroId),
       ctx.db
         .select({ telefone: mensagensSaida.telefone, numeroId: mensagensSaida.numeroId, em: max(mensagensSaida.createdAt) })
         .from(mensagensSaida)
+        .where(doNumeroDaUnidade(mensagensSaida.numeroId, ctx.unidadeId))
         .groupBy(mensagensSaida.telefone, mensagensSaida.numeroId),
       ctx.db
         .select({ telefone: disparoDestinatarios.telefone, numeroId: campanhasDisparo.numeroId, em: max(disparoDestinatarios.enviadoEm) })
         .from(disparoDestinatarios)
         .innerJoin(campanhasDisparo, eq(campanhasDisparo.id, disparoDestinatarios.campanhaId))
-        .where(eq(disparoDestinatarios.statusEnvio, "enviado"))
+        .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), eq(disparoDestinatarios.statusEnvio, "enviado")))
         .groupBy(disparoDestinatarios.telefone, campanhasDisparo.numeroId),
-      ctx.db.select({ total: count() }).from(sugestoesIa).where(eq(sugestoesIa.status, "pendente")),
-      ctx.db.select({ total: count() }).from(conversasConfig).where(eq(conversasConfig.precisaHumano, true)),
+      ctx.db
+        .select({ total: count() })
+        .from(sugestoesIa)
+        .where(and(eq(sugestoesIa.status, "pendente"), doNumeroDaUnidade(sugestoesIa.numeroId, ctx.unidadeId))),
+      ctx.db
+        .select({ total: count() })
+        .from(conversasConfig)
+        .where(and(eq(conversasConfig.precisaHumano, true), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId))),
     ]);
 
     const chaveConversa = (numeroId: number | null, telefone: string) => `${numeroId ?? 0}|${telefone}`;

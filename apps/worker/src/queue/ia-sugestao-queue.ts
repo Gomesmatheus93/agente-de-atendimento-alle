@@ -9,6 +9,7 @@ import {
   sugestoesIa,
   templatesWhatsapp,
   conversaExcluidaEm,
+  distribuirFilaDoNumero,
 } from "@atendimento-academias/db";
 import {
   IA_SUGESTAO_QUEUE_NAME,
@@ -41,7 +42,8 @@ async function sugerirResposta(db: Db, agente: AgenteAtendimento, telefone: stri
     .select()
     .from(conversasConfig)
     .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
-  if (!config?.iaAtiva || config.precisaHumano) return;
+  // Com um funcionário atendendo, a IA não sugere: quem responde é ele.
+  if (!config?.iaAtiva || config.precisaHumano || config.atendenteId) return;
 
   const [ultimaDoCliente] = await db
     .select({ id: respostasClientes.id, em: respostasClientes.recebidaEm })
@@ -132,6 +134,9 @@ async function sugerirResposta(db: Db, agente: AgenteAtendimento, telefone: stri
       tokensSaida: resultado.tokensSaida,
     });
   });
+
+  // Passou para humano: entra na fila e vai para o próximo funcionário disponível da unidade.
+  if (resultado.tipo === "humano") await distribuirFilaDoNumero(db, numeroId);
 
   console.log(
     resultado.tipo === "humano"

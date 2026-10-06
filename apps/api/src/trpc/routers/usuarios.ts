@@ -1,4 +1,4 @@
-import { gerarHashDeSenha, sessoes, usuarios } from "@atendimento-academias/db";
+import { devolverAtendimentosDe, gerarHashDeSenha, sessoes, usuarios, type Db } from "@atendimento-academias/db";
 import {
   atualizarUsuarioInputSchema,
   criarUsuarioInputSchema,
@@ -7,23 +7,29 @@ import {
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import { and, asc, count, eq, ne } from "drizzle-orm";
-import type { Context } from "../context.js";
 import { procedimentoAdmin, router } from "../trpc.js";
 
-// A plataforma não pode ficar sem ninguém que administre: é a regra que protege rebaixar, desativar
-// ou remover o último admin — inclusive você mesmo, por engano.
-async function garantirQueSobraAdmin(ctx: Context, usuarioId: number): Promise<void> {
-  const [linha] = await ctx.db
+// A unidade não pode ficar sem ninguém que administre: é a regra que protege rebaixar, desativar
+// ou remover o último admin dela — inclusive você mesmo, por engano.
+async function garantirQueSobraAdmin(db: Db, unidadeId: number, usuarioId: number): Promise<void> {
+  const [linha] = await db
     .select({ total: count() })
     .from(usuarios)
-    .where(and(eq(usuarios.papel, "admin"), eq(usuarios.ativo, true), ne(usuarios.id, usuarioId)));
+    .where(and(eq(usuarios.unidadeId, unidadeId), eq(usuarios.papel, "admin"), eq(usuarios.ativo, true), ne(usuarios.id, usuarioId)));
 
   if ((linha?.total ?? 0) === 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Este é o único administrador ativo. Promova outra pessoa antes de mudar este acesso.",
+      message: "Este é o único administrador ativo da unidade. Promova outra pessoa antes de mudar este acesso.",
     });
   }
+}
+
+// Só pessoas da unidade em que se está trabalhando: um admin não mexe na equipe de outra unidade.
+async function usuarioDaUnidade(db: Db, unidadeId: number, id: number) {
+  const [usuario] = await db.select().from(usuarios).where(and(eq(usuarios.id, id), eq(usuarios.unidadeId, unidadeId)));
+  if (!usuario) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+  return usuario;
 }
 
 export const usuariosRouter = router({
@@ -38,6 +44,7 @@ export const usuariosRouter = router({
         criadoEm: usuarios.createdAt,
       })
       .from(usuarios)
+      .where(eq(usuarios.unidadeId, ctx.unidadeId))
       .orderBy(asc(usuarios.nome));
 
     return linhas.map((linha) => ({
@@ -60,6 +67,7 @@ export const usuariosRouter = router({
         nome: input.nome,
         email: input.email,
         papel: input.papel,
+        unidadeId: ctx.unidadeId,
         senhaHash: await gerarHashDeSenha(input.senha),
       })
       .returning({ id: usuarios.id });
@@ -68,11 +76,10 @@ export const usuariosRouter = router({
   }),
 
   atualizar: procedimentoAdmin.input(atualizarUsuarioInputSchema).mutation(async ({ ctx, input }) => {
-    const [usuario] = await ctx.db.select().from(usuarios).where(eq(usuarios.id, input.id));
-    if (!usuario) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+    const usuario = await usuarioDaUnidade(ctx.db, ctx.unidadeId, input.id);
 
     const perdeAdmin = usuario.papel === "admin" && (input.papel === "membro" || input.ativo === false);
-    if (perdeAdmin) await garantirQueSobraAdmin(ctx, usuario.id);
+    if (perdeAdmin) await garantirQueSobraAdmin(ctx.db, ctx.unidadeId, usuario.id);
 
     await ctx.db
       .update(usuarios)
@@ -83,15 +90,19 @@ export const usuariosRouter = router({
       })
       .where(eq(usuarios.id, input.id));
 
-    // Quem foi desativado perde o acesso na hora, sem esperar a sessão vencer.
-    if (input.ativo === false) await ctx.db.delete(sessoes).where(eq(sessoes.usuarioId, input.id));
+    // Quem foi desativado perde o acesso na hora, sem esperar a sessão vencer, e sai da fila: os clientes
+    // que estavam com ele voltam para os próximos atendentes.
+    if (input.ativo === false) {
+      await ctx.db.delete(sessoes).where(eq(sessoes.usuarioId, input.id));
+      await ctx.db.update(usuarios).set({ disponivel: false, disponivelDesde: null }).where(eq(usuarios.id, input.id));
+      await devolverAtendimentosDe(ctx.db, input.id, ctx.unidadeId);
+    }
 
     return { id: input.id };
   }),
 
   redefinirSenha: procedimentoAdmin.input(redefinirSenhaInputSchema).mutation(async ({ ctx, input }) => {
-    const [usuario] = await ctx.db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.id, input.id));
-    if (!usuario) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+    await usuarioDaUnidade(ctx.db, ctx.unidadeId, input.id);
 
     await ctx.db
       .update(usuarios)
@@ -108,10 +119,12 @@ export const usuariosRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode remover o próprio acesso." });
     }
 
-    const [usuario] = await ctx.db.select().from(usuarios).where(eq(usuarios.id, input.id));
-    if (!usuario) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-    if (usuario.papel === "admin") await garantirQueSobraAdmin(ctx, usuario.id);
+    const usuario = await usuarioDaUnidade(ctx.db, ctx.unidadeId, input.id);
+    if (usuario.papel === "admin") await garantirQueSobraAdmin(ctx.db, ctx.unidadeId, usuario.id);
 
+    // Sai da fila antes de devolver os clientes dele, para a fila não devolvê-los para ele mesmo.
+    await ctx.db.update(usuarios).set({ disponivel: false }).where(eq(usuarios.id, input.id));
+    await devolverAtendimentosDe(ctx.db, input.id, ctx.unidadeId);
     await ctx.db.delete(usuarios).where(eq(usuarios.id, input.id));
     return { id: input.id };
   }),

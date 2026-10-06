@@ -1,4 +1,5 @@
 export * from "./enums.js";
+export * from "./unidades.js";
 export * from "./templatesWhatsapp.js";
 export * from "./campanhasDisparo.js";
 export * from "./disparoDestinatarios.js";

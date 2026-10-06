@@ -1,5 +1,6 @@
-import { createDbClient, sessoes, usuarios, type Db } from "@atendimento-academias/db";
+import { createDbClient, sessoes, unidades, usuarios, type Db } from "@atendimento-academias/db";
 import type * as trpcExpress from "@trpc/server/adapters/express";
+import { alias } from "drizzle-orm/pg-core";
 import { and, eq, gt } from "drizzle-orm";
 
 export const COOKIE_SESSAO = "sessao";
@@ -21,7 +22,11 @@ export interface UsuarioDaSessao {
   id: number;
   nome: string;
   email: string;
-  papel: "admin" | "membro";
+  papel: "superadmin" | "admin" | "membro";
+  // Unidade em que a pessoa está trabalhando: a dela, ou a que o superadmin escolheu (null = nenhuma).
+  unidadeId: number | null;
+  unidadeNome: string | null;
+  disponivel: boolean;
 }
 
 function lerCookie(cabecalho: string | undefined, nome: string): string | null {
@@ -35,17 +40,42 @@ function lerCookie(cabecalho: string | undefined, nome: string): string | null {
   return null;
 }
 
+const unidadeDaPessoa = alias(unidades, "unidade_da_pessoa");
+const unidadeDaSessao = alias(unidades, "unidade_da_sessao");
+
 // Sessão expirada não é apagada aqui: a limpeza sai mais barata em lote, e a consulta já a ignora.
 async function usuarioDaRequisicao(db: Db, token: string | null): Promise<UsuarioDaSessao | null> {
   if (!token) return null;
 
   const [linha] = await db
-    .select({ id: usuarios.id, nome: usuarios.nome, email: usuarios.email, papel: usuarios.papel })
+    .select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+      email: usuarios.email,
+      papel: usuarios.papel,
+      disponivel: usuarios.disponivel,
+      propria: { id: unidadeDaPessoa.id, nome: unidadeDaPessoa.nome, ativo: unidadeDaPessoa.ativo },
+      escolhida: { id: unidadeDaSessao.id, nome: unidadeDaSessao.nome },
+    })
     .from(sessoes)
     .innerJoin(usuarios, eq(usuarios.id, sessoes.usuarioId))
+    .leftJoin(unidadeDaPessoa, eq(unidadeDaPessoa.id, usuarios.unidadeId))
+    .leftJoin(unidadeDaSessao, eq(unidadeDaSessao.id, sessoes.unidadeId))
     .where(and(eq(sessoes.token, token), gt(sessoes.expiraEm, new Date()), eq(usuarios.ativo, true)));
+  if (!linha) return null;
 
-  return linha ?? null;
+  const base = { id: linha.id, nome: linha.nome, email: linha.email, papel: linha.papel, disponivel: linha.disponivel };
+  // O superadmin não tem unidade própria: trabalha na que escolheu nesta sessão.
+  if (linha.papel === "superadmin") {
+    return { ...base, unidadeId: linha.escolhida?.id ?? null, unidadeNome: linha.escolhida?.nome ?? null };
+  }
+  // Unidade desativada pelo superadmin: a equipe dela perde o acesso.
+  if (!linha.propria || !linha.propria.ativo) return null;
+  return { ...base, unidadeId: linha.propria.id, unidadeNome: linha.propria.nome };
+}
+
+export function tokenDaSessao(cabecalhoCookie: string | undefined): string | null {
+  return lerCookie(cabecalhoCookie, COOKIE_SESSAO);
 }
 
 // Usado também fora do tRPC (arquivos de /uploads), que exigem a mesma sessão.

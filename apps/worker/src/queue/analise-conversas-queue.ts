@@ -1,4 +1,15 @@
-import { configuracoes, contatos, conversasExcluidas, duvidasIa, funilClientes, mensagensSaida, respostasClientes, type Db } from "@atendimento-academias/db";
+import {
+  configuracoes,
+  contatos,
+  conversasExcluidas,
+  doNumeroDaUnidade,
+  duvidasIa,
+  funilClientes,
+  mensagensSaida,
+  numerosWhatsapp,
+  respostasClientes,
+  type Db,
+} from "@atendimento-academias/db";
 import {
   ANALISE_CONVERSAS_JOB_NAME,
   ANALISE_CONVERSAS_QUEUE_NAME,
@@ -22,8 +33,12 @@ const MAX_TEMAS_DE_REFERENCIA = 80;
 // Todo dia às 3h (horário de Brasília): pega o dia anterior inteiro e já está pronto de manhã.
 const HORARIO_DIARIO = "0 3 * * *";
 
+// A situação da análise é da plataforma inteira (unidade nula): a rodada diária passa por todas as unidades.
 async function salvarConfiguracao(db: Db, chave: string, valor: string): Promise<void> {
-  await db.insert(configuracoes).values({ chave, valor, secreto: false }).onConflictDoUpdate({ target: configuracoes.chave,  set: { valor } });
+  await db
+    .insert(configuracoes)
+    .values({ unidadeId: null, chave, valor, secreto: false })
+    .onConflictDoUpdate({ target: [configuracoes.unidadeId, configuracoes.chave], set: { valor } });
 }
 
 const salvarStatus = (db: Db, status: StatusDaAnalise) => salvarConfiguracao(db, CHAVE_ANALISE_STATUS, JSON.stringify(status));
@@ -86,14 +101,30 @@ async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: Analise
   const daRodada = pendentes.slice(0, MAX_CONVERSAS_POR_RODADA);
 
   // Os temas mais usados vão no pedido, para a IA reaproveitar o mesmo rótulo e o ranking somar certo.
-  const temas = (
-    await db
-      .select({ tema: duvidasIa.tema, vezes: count() })
-      .from(duvidasIa)
-      .groupBy(duvidasIa.tema)
-      .orderBy(desc(count()))
-      .limit(MAX_TEMAS_DE_REFERENCIA)
-  ).map((linha) => linha.tema);
+  // Cada unidade tem o próprio ranking, então os temas de referência são os da unidade da conversa.
+  const unidadePorNumero = new Map(
+    (await db.select({ id: numerosWhatsapp.id, unidadeId: numerosWhatsapp.unidadeId }).from(numerosWhatsapp)).map((linha) => [
+      linha.id,
+      linha.unidadeId,
+    ]),
+  );
+  const temasPorUnidade = new Map<number, string[]>();
+  async function temasDaUnidade(unidadeId: number): Promise<string[]> {
+    let temas = temasPorUnidade.get(unidadeId);
+    if (!temas) {
+      temas = (
+        await db
+          .select({ tema: duvidasIa.tema, vezes: count() })
+          .from(duvidasIa)
+          .where(doNumeroDaUnidade(duvidasIa.numeroId, unidadeId))
+          .groupBy(duvidasIa.tema)
+          .orderBy(desc(count()))
+          .limit(MAX_TEMAS_DE_REFERENCIA)
+      ).map((linha) => linha.tema);
+      temasPorUnidade.set(unidadeId, temas);
+    }
+    return temas;
+  }
 
   let analisadas = 0;
   let erros = 0;
@@ -105,6 +136,9 @@ async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: Analise
       const mensagens = await carregarConversa(db, conversa.telefone, conversa.numeroId, MAX_MENSAGENS_ANALISADAS);
       if (!mensagens.some((mensagem) => mensagem.autor === "cliente")) continue;
 
+      const unidadeId = unidadePorNumero.get(conversa.numeroId);
+      if (unidadeId === undefined) continue;
+      const temas = await temasDaUnidade(unidadeId);
       const [contato] = await db.select({ nome: contatos.nomePerfil }).from(contatos).where(eq(contatos.telefone, conversa.telefone));
       const resultado = await analista.analisar(mensagens, contato?.nome ?? null, temas);
       if (!resultado) {

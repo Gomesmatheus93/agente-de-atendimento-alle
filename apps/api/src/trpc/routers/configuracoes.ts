@@ -2,7 +2,6 @@ import {
   CHAVE_WEBHOOK_APP_SECRET,
   CHAVE_WEBHOOK_VERIFY_TOKEN,
   cifrar,
-  configuracoes,
   contasWhatsapp,
   decifrar,
   midiasAgente,
@@ -26,9 +25,11 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   chaveIntegracaoFinal,
   configuracaoDoAgente,
+  configuracaoDoWebhook,
   gerarChaveIntegracao,
   revogarChaveIntegracao,
   salvarConfiguracaoDoAgente,
+  salvarValor,
 } from "../../config/plataforma.js";
 import {
   atualizarPerfilDoNumero,
@@ -40,7 +41,7 @@ import {
   subirImagemParaHandle,
 } from "../../meta/graph.js";
 import { salvarBuffer } from "../../media/armazenamento.js";
-import { procedimentoAdmin, procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
 
 export function erroDaMeta(erro: unknown): TRPCError {
   if (erro instanceof ErroGraph) {
@@ -55,15 +56,28 @@ export async function tokenDaConta(db: Db, contaId: number): Promise<string> {
   return decifrar(conta.tokenCifrado);
 }
 
-async function numeroComToken(db: Db, numeroId: number) {
-  const [numero] = await db.select().from(numerosWhatsapp).where(eq(numerosWhatsapp.id, numeroId));
+async function numeroComToken(db: Db, unidadeId: number, numeroId: number) {
+  const [numero] = await db
+    .select()
+    .from(numerosWhatsapp)
+    .where(and(eq(numerosWhatsapp.id, numeroId), eq(numerosWhatsapp.unidadeId, unidadeId)));
   if (!numero) throw new TRPCError({ code: "NOT_FOUND", message: "Número não encontrado" });
   return { numero, token: await tokenDaConta(db, numero.contaId) };
 }
 
+// A conta da unidade (outra unidade não enxerga nem mexe).
+async function contaDaUnidade(db: Db, unidadeId: number, contaId: number) {
+  const [conta] = await db
+    .select()
+    .from(contasWhatsapp)
+    .where(and(eq(contasWhatsapp.id, contaId), eq(contasWhatsapp.unidadeId, unidadeId)));
+  if (!conta) throw new TRPCError({ code: "NOT_FOUND", message: "Conta não encontrada" });
+  return conta;
+}
+
 // Guarda os números que a Meta reporta para a conta. Número que sumiu lá é apagado aqui, menos se
 // estiver ativo: nesse caso some da lista de uso, mas a campanha antiga continua apontando para ele.
-async function sincronizarNumeros(db: Db, contaId: number, wabaId: string, token: string): Promise<number> {
+async function sincronizarNumeros(db: Db, unidadeId: number, contaId: number, wabaId: string, token: string): Promise<number> {
   const daMeta = await listarNumeros(wabaId, token);
 
   for (const numero of daMeta) {
@@ -71,6 +85,7 @@ async function sincronizarNumeros(db: Db, contaId: number, wabaId: string, token
       .insert(numerosWhatsapp)
       .values({
         contaId,
+        unidadeId,
         phoneNumberId: numero.id,
         numeroExibicao: numero.display_phone_number,
         nomeVerificado: numero.verified_name ?? null,
@@ -88,20 +103,6 @@ async function sincronizarNumeros(db: Db, contaId: number, wabaId: string, token
   return daMeta.length;
 }
 
-async function lerConfiguracao(db: Db, chave: string): Promise<string | null> {
-  const [linha] = await db.select().from(configuracoes).where(eq(configuracoes.chave, chave));
-  if (!linha) return null;
-  return linha.secreto ? decifrar(linha.valor) : linha.valor;
-}
-
-async function salvarConfiguracao(db: Db, chave: string, valor: string, secreto: boolean): Promise<void> {
-  const guardado = secreto ? cifrar(valor) : valor;
-  await db
-    .insert(configuracoes)
-    .values({ chave, valor: guardado, secreto })
-    .onConflictDoUpdate({ target: configuracoes.chave,  set: { valor: guardado, secreto } });
-}
-
 // A Meta classifica em MARKETING/UTILITY/AUTHENTICATION; aqui o nome é outro e define o preço.
 export const CATEGORIA_POR_NOME: Record<string, "marketing" | "utilidade" | "autenticacao" | "servico"> = {
   MARKETING: "marketing",
@@ -110,11 +111,16 @@ export const CATEGORIA_POR_NOME: Record<string, "marketing" | "utilidade" | "aut
   SERVICE: "servico",
 };
 
-// Ler (números, templates, perfil) é de todos; mudar credenciais, webhook, chave de integração, comportamento
-// do agente e o perfil público do número é só de administrador.
+// Tudo aqui é da unidade em que se está trabalhando. Ler (números, templates, perfil) é de toda a equipe;
+// mudar credenciais, webhook, chave de integração, comportamento do agente e o perfil público do número é
+// só do administrador da unidade (ou do superadmin).
 export const configuracoesRouter = router({
-  listar: procedimentoAutenticado.query(async ({ ctx }) => {
-    const contas = await ctx.db.select().from(contasWhatsapp).orderBy(asc(contasWhatsapp.nome));
+  listar: procedimentoUnidade.query(async ({ ctx }) => {
+    const contas = await ctx.db
+      .select()
+      .from(contasWhatsapp)
+      .where(eq(contasWhatsapp.unidadeId, ctx.unidadeId))
+      .orderBy(asc(contasWhatsapp.nome));
     const numeros = contas.length
       ? await ctx.db
           .select()
@@ -123,12 +129,12 @@ export const configuracoesRouter = router({
           .orderBy(asc(numerosWhatsapp.numeroExibicao))
       : [];
 
-    const [verifyToken, appSecret, integracaoFinal, agente] = await Promise.all([
-      lerConfiguracao(ctx.db, CHAVE_WEBHOOK_VERIFY_TOKEN),
-      lerConfiguracao(ctx.db, CHAVE_WEBHOOK_APP_SECRET),
-      chaveIntegracaoFinal(ctx.db),
-      configuracaoDoAgente(ctx.db),
+    const [{ verifyToken, appSecret }, integracaoFinal, agente] = await Promise.all([
+      configuracaoDoWebhook(ctx.db, ctx.unidadeId),
+      chaveIntegracaoFinal(ctx.db, ctx.unidadeId),
+      configuracaoDoAgente(ctx.db, ctx.unidadeId),
     ]);
+    const ehAdmin = ctx.usuario.papel === "admin" || ctx.usuario.papel === "superadmin";
 
     return {
       // O token nunca sai daqui: a tela mostra só os últimos dígitos para você reconhecer qual está salvo.
@@ -150,7 +156,7 @@ export const configuracoesRouter = router({
       })),
       webhook: {
         // O token de verificação é digitado igual no painel da Meta, então aparece na tela — só para admin.
-        verifyToken: ctx.usuario.papel === "admin" ? (verifyToken ?? null) : null,
+        verifyToken: ehAdmin ? (verifyToken ?? null) : null,
         // O segredo do app não: só dizemos se existe.
         appSecretConfigurado: appSecret !== null,
       },
@@ -164,6 +170,13 @@ export const configuracoesRouter = router({
   // Cadastra ou atualiza uma conta. O token é testado na Meta antes de salvar: se não funcionar, nada é gravado.
   salvarConta: procedimentoAdmin.input(salvarContaInputSchema).mutation(async ({ ctx, input }) => {
     const [existente] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.wabaId, input.wabaId));
+    // Uma conta só pode ser de uma unidade: senão as conversas de uma apareceriam na outra.
+    if (existente && existente.unidadeId !== ctx.unidadeId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Esta conta do WhatsApp já está cadastrada em outra unidade. Cada unidade precisa da própria conta.",
+      });
+    }
 
     const token = input.token ?? (existente ? decifrar(existente.tokenCifrado) : null);
     if (!token) {
@@ -191,14 +204,14 @@ export const configuracoesRouter = router({
     } else {
       const [{ id }] = await ctx.db
         .insert(contasWhatsapp)
-        .values({ nome, wabaId: input.wabaId, tokenCifrado, tokenFinal })
+        .values({ unidadeId: ctx.unidadeId, nome, wabaId: input.wabaId, tokenCifrado, tokenFinal })
         .returning({ id: contasWhatsapp.id });
       contaId = id;
     }
 
     let encontrados: number;
     try {
-      encontrados = await sincronizarNumeros(ctx.db, contaId, input.wabaId, token);
+      encontrados = await sincronizarNumeros(ctx.db, ctx.unidadeId, contaId, input.wabaId, token);
     } catch (erro) {
       throw erroDaMeta(erro);
     }
@@ -206,12 +219,11 @@ export const configuracoesRouter = router({
     return { contaId, nome, numeros: encontrados };
   }),
 
-  sincronizarNumeros: procedimentoAutenticado.input(contaInputSchema).mutation(async ({ ctx, input }) => {
-    const [conta] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.id, input.contaId));
-    if (!conta) throw new TRPCError({ code: "NOT_FOUND", message: "Conta não encontrada" });
+  sincronizarNumeros: procedimentoUnidade.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+    const conta = await contaDaUnidade(ctx.db, ctx.unidadeId, input.contaId);
 
     try {
-      const encontrados = await sincronizarNumeros(ctx.db, conta.id, conta.wabaId, decifrar(conta.tokenCifrado));
+      const encontrados = await sincronizarNumeros(ctx.db, ctx.unidadeId, conta.id, conta.wabaId, decifrar(conta.tokenCifrado));
       return { numeros: encontrados };
     } catch (erro) {
       throw erroDaMeta(erro);
@@ -219,19 +231,21 @@ export const configuracoesRouter = router({
   }),
 
   definirNumeroAtivo: procedimentoAdmin.input(definirNumeroAtivoInputSchema).mutation(async ({ ctx, input }) => {
-    await ctx.db.update(numerosWhatsapp).set({ ativo: input.ativo }).where(eq(numerosWhatsapp.id, input.numeroId));
+    await ctx.db
+      .update(numerosWhatsapp)
+      .set({ ativo: input.ativo })
+      .where(and(eq(numerosWhatsapp.id, input.numeroId), eq(numerosWhatsapp.unidadeId, ctx.unidadeId)));
     return { numeroId: input.numeroId, ativo: input.ativo };
   }),
 
   removerConta: procedimentoAdmin.input(contaInputSchema).mutation(async ({ ctx, input }) => {
-    await ctx.db.delete(contasWhatsapp).where(eq(contasWhatsapp.id, input.contaId));
+    await ctx.db.delete(contasWhatsapp).where(and(eq(contasWhatsapp.id, input.contaId), eq(contasWhatsapp.unidadeId, ctx.unidadeId)));
     return { contaId: input.contaId };
   }),
 
   // Traz os templates aprovados da conta para a plataforma, para aparecerem em Nova campanha.
-  sincronizarTemplates: procedimentoAutenticado.input(contaInputSchema).mutation(async ({ ctx, input }) => {
-    const [conta] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.id, input.contaId));
-    if (!conta) throw new TRPCError({ code: "NOT_FOUND", message: "Conta não encontrada" });
+  sincronizarTemplates: procedimentoUnidade.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+    const conta = await contaDaUnidade(ctx.db, ctx.unidadeId, input.contaId);
 
     let daMeta;
     try {
@@ -264,6 +278,7 @@ export const configuracoesRouter = router({
         );
 
       const valores = {
+        unidadeId: ctx.unidadeId,
         contaId: conta.id,
         nome: template.name,
         conteudo: corpo,
@@ -289,8 +304,8 @@ export const configuracoesRouter = router({
   }),
 
   // Perfil comercial do número (foto, recado, descrição...), lido direto da Meta: não fica guardado aqui.
-  perfilDoNumero: procedimentoAutenticado.input(numeroInputSchema).query(async ({ ctx, input }) => {
-    const { numero, token } = await numeroComToken(ctx.db, input.numeroId);
+  perfilDoNumero: procedimentoUnidade.input(numeroInputSchema).query(async ({ ctx, input }) => {
+    const { numero, token } = await numeroComToken(ctx.db, ctx.unidadeId, input.numeroId);
     let perfil;
     try {
       perfil = await buscarPerfilDoNumero(numero.phoneNumberId, token);
@@ -309,7 +324,7 @@ export const configuracoesRouter = router({
   }),
 
   salvarPerfilDoNumero: procedimentoAdmin.input(salvarPerfilNumeroInputSchema).mutation(async ({ ctx, input }) => {
-    const { numero, token } = await numeroComToken(ctx.db, input.numeroId);
+    const { numero, token } = await numeroComToken(ctx.db, ctx.unidadeId, input.numeroId);
     try {
       // A foto vai pela Resumable Upload API; o perfil recebe só o handle devolvido.
       const fotoHandle = input.foto
@@ -331,8 +346,8 @@ export const configuracoesRouter = router({
   }),
 
   // Imagens que o agente do n8n anexa às respostas, pelo nome ("imagem": "planos" em /integracoes/mensagens).
-  midiasAgente: procedimentoAutenticado.query(async ({ ctx }) =>
-    ctx.db.select().from(midiasAgente).orderBy(asc(midiasAgente.chave)),
+  midiasAgente: procedimentoUnidade.query(async ({ ctx }) =>
+    ctx.db.select().from(midiasAgente).where(eq(midiasAgente.unidadeId, ctx.unidadeId)).orderBy(asc(midiasAgente.chave)),
   ),
 
   // Salvar com um nome que já existe troca a imagem: o n8n continua pedindo pelo mesmo nome.
@@ -341,28 +356,28 @@ export const configuracoesRouter = router({
     const valores = { midiaUrl: salvo.url, mimeType: input.imagem.mimeType, descricao: input.descricao || null };
     await ctx.db
       .insert(midiasAgente)
-      .values({ chave: input.chave, ...valores })
-      .onConflictDoUpdate({ target: midiasAgente.chave, set: valores });
+      .values({ unidadeId: ctx.unidadeId, chave: input.chave, ...valores })
+      .onConflictDoUpdate({ target: [midiasAgente.unidadeId, midiasAgente.chave], set: valores });
     return { chave: input.chave };
   }),
 
   removerMidiaAgente: procedimentoAdmin.input(midiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
-    await ctx.db.delete(midiasAgente).where(eq(midiasAgente.chave, input.chave));
+    await ctx.db.delete(midiasAgente).where(and(eq(midiasAgente.unidadeId, ctx.unidadeId), eq(midiasAgente.chave, input.chave)));
     return { ok: true };
   }),
 
   salvarWebhook: procedimentoAdmin.input(salvarWebhookInputSchema).mutation(async ({ ctx, input }) => {
-    if (input.verifyToken) await salvarConfiguracao(ctx.db, CHAVE_WEBHOOK_VERIFY_TOKEN, input.verifyToken, false);
-    if (input.appSecret) await salvarConfiguracao(ctx.db, CHAVE_WEBHOOK_APP_SECRET, input.appSecret, true);
+    if (input.verifyToken) await salvarValor(ctx.db, ctx.unidadeId, CHAVE_WEBHOOK_VERIFY_TOKEN, input.verifyToken);
+    if (input.appSecret) await salvarValor(ctx.db, ctx.unidadeId, CHAVE_WEBHOOK_APP_SECRET, input.appSecret, true);
     return { ok: true };
   }),
 
   // Gera uma chave nova para sistemas externos (n8n, Zapier, etc.) chamarem /integracoes/*. Uma chave
   // nova invalida a anterior; a tela mostra o valor uma única vez, nesta resposta.
-  gerarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db)),
+  gerarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db, ctx.unidadeId)),
 
   revogarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => {
-    await revogarChaveIntegracao(ctx.db);
+    await revogarChaveIntegracao(ctx.db, ctx.unidadeId);
     return { ok: true };
   }),
 
@@ -372,7 +387,7 @@ export const configuracoesRouter = router({
     if (input.modo === "n8n" && !input.webhookN8nUrl) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a URL do webhook do n8n para usar esse modo." });
     }
-    await salvarConfiguracaoDoAgente(ctx.db, input.modo, input.webhookN8nUrl || null);
+    await salvarConfiguracaoDoAgente(ctx.db, ctx.unidadeId, input.modo, input.webhookN8nUrl || null);
     return { ok: true };
   }),
 });

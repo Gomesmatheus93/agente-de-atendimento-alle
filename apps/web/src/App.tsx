@@ -5,6 +5,8 @@ import { Login } from "./pages/Login.js";
 import { Campanhas } from "./pages/Campanhas.js";
 import { Configuracoes } from "./pages/Configuracoes.js";
 import { Usuarios } from "./pages/Usuarios.js";
+import { Fila } from "./pages/Fila.js";
+import { Unidades } from "./pages/Unidades.js";
 import { NovaCampanha } from "./pages/NovaCampanha/NovaCampanha.js";
 import { Calendario } from "./pages/Calendario.js";
 import { Conversas } from "./pages/Conversas.js";
@@ -48,11 +50,20 @@ export function App() {
     );
   }
 
-  return <Painel />;
+  return <Painel semUnidade={estado.data.usuario.unidadeId === null} />;
 }
 
-function Painel() {
+function Painel({ semUnidade }: { semUnidade: boolean }) {
   const rota = useRota();
+
+  // Superadmin sem unidade escolhida: só a tela Unidades faz sentido (o resto é dado de alguma unidade).
+  if (semUnidade || rota.tela === "unidades") {
+    return (
+      <Layout telaAtiva="unidades" titulo="Unidades" descricao="Cada academia com o próprio painel, número e equipe.">
+        <Unidades />
+      </Layout>
+    );
+  }
 
   switch (rota.tela) {
     case "visao-geral":
@@ -130,8 +141,14 @@ function Painel() {
       );
     case "usuarios":
       return (
-        <Layout telaAtiva="usuarios" titulo="Usuários" descricao="Quem pode entrar no painel e o que cada um pode fazer.">
+        <Layout telaAtiva="usuarios" titulo="Equipe" descricao="Quem trabalha nesta unidade e o que cada um pode fazer.">
           <Usuarios />
+        </Layout>
+      );
+    case "fila":
+      return (
+        <Layout telaAtiva="fila" titulo="Fila de atendimento" descricao="Quem está disponível, quem está atendendo e quem está esperando.">
+          <Fila />
         </Layout>
       );
     case "conversas":
