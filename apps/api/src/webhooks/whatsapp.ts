@@ -389,6 +389,20 @@ async function registrarSituacaoDeEntrega(db: Db, numeroId: number, situacao: Si
   return disparos.count;
 }
 
+// A Meta manda os eventos de todos os números da conta (WABA), inclusive os desativados no painel, que
+// podem estar sendo usados por outro sistema e ter muito movimento. São ignorados; o log avisa uma vez a
+// cada 10 minutos por número, para não esconder o que importa.
+const AVISO_NUMERO_IGNORADO_MS = 10 * 60_000;
+const ultimoAvisoPorNumero = new Map<string, number>();
+function avisarNumeroIgnorado(phoneNumberId: string): void {
+  const agora = Date.now();
+  if (agora - (ultimoAvisoPorNumero.get(phoneNumberId) ?? 0) < AVISO_NUMERO_IGNORADO_MS) return;
+  ultimoAvisoPorNumero.set(phoneNumberId, agora);
+  console.log(
+    `[webhook-whatsapp] ignorando eventos do número ${phoneNumberId}: desativado no painel, de unidade desativada ou não cadastrado (próximo aviso em 10 min)`,
+  );
+}
+
 // O aviso pode chegar antes de o worker gravar o id da mensagem (a Meta é rápida): tenta de novo uma vez.
 const ESPERA_PARA_REPETIR_MS = 5000;
 
@@ -527,9 +541,7 @@ export function criarWebhookWhatsapp(): Router {
         }
       }
 
-      if (descartados.size > 0) {
-        console.log(`[webhook-whatsapp] ignorado: evento de número que não é da plataforma (${[...descartados].join(", ")})`);
-      }
+      for (const phoneNumberId of descartados) avisarNumeroIgnorado(phoneNumberId);
       if (mudancas.length === 0) {
         res.sendStatus(200);
         return;
