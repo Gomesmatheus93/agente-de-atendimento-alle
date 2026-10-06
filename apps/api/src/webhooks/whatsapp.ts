@@ -150,8 +150,9 @@ async function registrarContato(db: Db, telefone: string, nomePerfil: string): P
     .onConflictDoUpdate({ target: contatos.telefone,  set: { nomePerfil } });
 }
 
-// Cada mensagem aceita de um cliente nosso religa a IA, inclusive após desligamento manual.
-// O encaminhamento para atendimento humano continua pausando o agente.
+// A IA liga sozinha quando um cliente nosso escreve, para o atendimento seguir sem esperar a equipe. Ela
+// só fica parada quando: alguém da equipe desligou à mão nesta conversa (iaDesligadaManual), ou o cliente
+// pediu uma pessoa / o bot não soube responder (precisaHumano — até "Marcar como resolvida").
 async function acionarAgenteSeLigado(
   db: Db,
   telefone: string,
@@ -159,19 +160,25 @@ async function acionarAgenteSeLigado(
   conteudo: ConteudoMensagem,
   nomePerfil: string | undefined,
 ): Promise<void> {
-  await db
-    .insert(conversasConfig)
-    .values({ telefone, numeroId, iaAtiva: true })
-    .onConflictDoUpdate({
-      target: conversasConfig.telefone,
-      set: { numeroId, iaAtiva: true },
-    });
-
-  const [config] = await db
-    .select({ iaAtiva: conversasConfig.iaAtiva, precisaHumano: conversasConfig.precisaHumano })
+  const [existente] = await db
+    .select({
+      iaAtiva: conversasConfig.iaAtiva,
+      iaDesligadaManual: conversasConfig.iaDesligadaManual,
+      precisaHumano: conversasConfig.precisaHumano,
+    })
     .from(conversasConfig)
     .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
-  if (!config?.iaAtiva || config.precisaHumano) return;
+
+  if (!existente) {
+    await db.insert(conversasConfig).values({ telefone, numeroId, iaAtiva: true }).onConflictDoNothing();
+  } else if (!existente.iaAtiva && !existente.iaDesligadaManual) {
+    await db
+      .update(conversasConfig)
+      .set({ iaAtiva: true })
+      .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
+  }
+
+  if (existente?.iaDesligadaManual || existente?.precisaHumano) return;
 
   const { modo, webhookN8nUrl } = await configuracaoDoAgente(db);
 
@@ -243,7 +250,7 @@ async function registrarResposta(
   mensagem: MensagemRecebida,
   conteudo: ConteudoMensagem,
   numeroId: number,
-): Promise<string | null> {
+): Promise<{ telefone: string; nova: boolean } | null> {
   const variantes = variantesDoTelefone(mensagem.from);
   const recebidaEm = new Date(Number(mensagem.timestamp) * 1000);
 
@@ -286,7 +293,7 @@ async function registrarResposta(
     telefone = algumDisparo.telefone;
   }
 
-  await db
+  const gravada = await db
     .insert(respostasClientes)
     .values({
       mensagemExternaId: mensagem.id,
@@ -301,9 +308,11 @@ async function registrarResposta(
       recebidaEm,
     })
     // Mensagem já registrada (webhook reenviado): mantém a linha como está.
-    .onConflictDoNothing({ target: respostasClientes.mensagemExternaId });
+    .onConflictDoNothing({ target: respostasClientes.mensagemExternaId })
+    .returning({ id: respostasClientes.id });
 
-  return telefone;
+  // Sem linha devolvida = era repetida: quem chama não aciona o bot de novo (o cliente receberia duas respostas).
+  return { telefone, nova: gravada.length > 0 };
 }
 
 // A Meta avisa aqui o resultado da análise de cada template (e quando ela pausa ou desativa um já aprovado).
@@ -470,11 +479,16 @@ export function criarWebhookWhatsapp(): Router {
           continue;
         }
 
-        const telefone = await registrarResposta(db, mensagem, conteudo, mensagem.numeroId);
-        if (!telefone) {
+        const registro = await registrarResposta(db, mensagem, conteudo, mensagem.numeroId);
+        if (!registro) {
           console.log(`[webhook-whatsapp] ignorada: ${mensagem.from} nunca recebeu disparo nosso`);
           continue;
         }
+        if (!registro.nova) {
+          console.log(`[webhook-whatsapp] ignorada: mensagem ${mensagem.id} já tinha chegado (reenvio da Meta)`);
+          continue;
+        }
+        const { telefone } = registro;
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
         await acionarAgenteSeLigado(db, telefone, mensagem.numeroId, conteudo, nomePerfil);

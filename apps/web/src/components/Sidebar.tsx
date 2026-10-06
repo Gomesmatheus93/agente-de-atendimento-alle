@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { hrefDe, type Rota } from "../lib/route.js";
 import { useTema } from "../lib/tema.js";
 import { trpc } from "../lib/trpc.js";
+import { usePedidosDeHumano } from "./AvisosDeHumano.js";
 import { Icone, type NomeIcone } from "./ui/Icone.js";
 
 type Tela = Rota["tela"];
@@ -58,6 +59,7 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   // Conversas com mensagem ainda não lida; atualiza sozinho para o aviso aparecer sem recarregar.
   const naoLidas = trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000 }).data?.conversas ?? 0;
   const ehAdmin = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel === "admin";
+  const precisamDeHumano = usePedidosDeHumano().data?.length ?? 0;
 
   const grupos = GRUPOS.map((grupo) => ({
     ...grupo,
@@ -85,10 +87,19 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
               >
                 <Icone nome={item.icone} tamanho={16} className={ativo ? "text-brand-2" : ""} />
                 <span className="truncate">{item.label}</span>
+                {item.tela === "conversas" && precisamDeHumano > 0 && (
+                  <span
+                    aria-label={`${precisamDeHumano} cliente${precisamDeHumano > 1 ? "s" : ""} precisando de atendimento humano`}
+                    title="Precisando de atendimento humano"
+                    className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center gap-0.5 rounded-full bg-amber-400 px-1 text-[10px] font-bold text-amber-950"
+                  >
+                    🙋{precisamDeHumano}
+                  </span>
+                )}
                 {item.tela === "conversas" && naoLidas > 0 && (
                   <span
                     aria-label={`${naoLidas} conversa${naoLidas > 1 ? "s" : ""} com mensagem não lida`}
-                    className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-2 px-1 text-[10px] font-bold text-brand-2-contrast"
+                    className={`${precisamDeHumano > 0 ? "ml-1" : "ml-auto"} inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-2 px-1 text-[10px] font-bold text-brand-2-contrast`}
                   >
                     {naoLidas > 99 ? "99+" : naoLidas}
                   </span>

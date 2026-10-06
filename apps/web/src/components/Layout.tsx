@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import type { Rota } from "../lib/route.js";
+import { AvisosDeHumano, usePedidosDeHumano } from "./AvisosDeHumano.js";
 import { Sidebar } from "./Sidebar.js";
 
 interface LayoutProps {
@@ -13,13 +14,16 @@ interface LayoutProps {
 }
 
 export function Layout({ telaAtiva, titulo, descricao, acoes, ampla = false, children }: LayoutProps) {
+  // Com cliente esperando uma pessoa, o título da aba mostra quantos — dá para ver mesmo em outra aba.
+  const esperando = usePedidosDeHumano().data?.length ?? 0;
   useEffect(() => {
-    document.title = `${titulo} · Allp Chat`;
-  }, [titulo]);
+    document.title = `${esperando > 0 ? `(${esperando}) 🙋 ` : ""}${titulo} · Allp Chat`;
+  }, [titulo, esperando]);
 
   return (
     <div className="min-h-screen bg-app-bg md:flex">
       <Sidebar telaAtiva={telaAtiva} />
+      <AvisosDeHumano />
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 xl:px-10">
         <div className={`mx-auto w-full ${ampla ? "max-w-[1800px]" : "max-w-6xl"}`}>
           <header className="mb-6 flex flex-wrap items-start justify-between gap-4">

@@ -329,12 +329,14 @@ export const conversasRouter = router({
     return { id: input.id };
   }),
 
-  // Liga ou desliga a IA nessa conversa. Ao ligar, ela já sugere uma resposta se o cliente estiver esperando.
+  // Liga ou desliga a IA nessa conversa. Desligar aqui é "manual": ela não religa sozinha quando o cliente
+  // escreve de novo, até alguém ligar aqui de volta. Ao ligar, já sugere uma resposta se o cliente estiver esperando.
   definirIa: procedimentoAutenticado.input(definirIaInputSchema).mutation(async ({ ctx, input }) => {
+    const valores = { iaAtiva: input.ativa, iaDesligadaManual: !input.ativa };
     await ctx.db
       .insert(conversasConfig)
-      .values({ telefone: input.telefone, numeroId: input.numeroId, iaAtiva: input.ativa })
-      .onConflictDoUpdate({ target: conversasConfig.telefone,  set: { iaAtiva: input.ativa, numeroId: input.numeroId } });
+      .values({ telefone: input.telefone, numeroId: input.numeroId, ...valores })
+      .onConflictDoUpdate({ target: [conversasConfig.numeroId, conversasConfig.telefone], set: valores });
 
     if (input.ativa) await pedirSugestaoIa(input.telefone, input.numeroId);
 
@@ -355,11 +357,45 @@ export const conversasRouter = router({
     return { id: input.id };
   }),
 
+  // Conversas esperando uma pessoa (o cliente pediu ou o bot não soube responder): alimenta o aviso que
+  // aparece em qualquer tela do painel. O mais antigo primeiro — é quem está esperando há mais tempo.
+  pedidosDeHumano: procedimentoAutenticado.query(async ({ ctx }) => {
+    const pedidos = await ctx.db
+      .select({
+        telefone: conversasConfig.telefone,
+        numeroId: conversasConfig.numeroId,
+        motivo: conversasConfig.motivoHumano,
+        desde: conversasConfig.humanoPedidoEm,
+        atualizadoEm: conversasConfig.updatedAt,
+      })
+      .from(conversasConfig)
+      .where(eq(conversasConfig.precisaHumano, true))
+      .limit(50);
+    if (pedidos.length === 0) return [];
+
+    const nomes = await ctx.db
+      .select({ telefone: contatos.telefone, nome: contatos.nomePerfil })
+      .from(contatos)
+      .where(inArray(contatos.telefone, pedidos.map((pedido) => pedido.telefone)));
+    const nomePorTelefone = new Map(nomes.map((linha) => [linha.telefone, linha.nome?.trim() || null]));
+
+    return pedidos
+      .map((pedido) => ({
+        telefone: pedido.telefone,
+        numeroId: pedido.numeroId,
+        nome: nomePorTelefone.get(pedido.telefone) ?? null,
+        motivo: pedido.motivo,
+        // Pedidos de antes deste campo existir usam a última alteração da conversa.
+        desde: (pedido.desde ?? pedido.atualizadoEm).toISOString(),
+      }))
+      .sort((a, b) => a.desde.localeCompare(b.desde));
+  }),
+
   // A equipe assumiu a conversa que a IA passou adiante; ela volta a sugerir nas próximas mensagens.
   resolverHumano: procedimentoAutenticado.input(resolverHumanoInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db
       .update(conversasConfig)
-      .set({ precisaHumano: false, motivoHumano: null })
+      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null })
       .where(and(eq(conversasConfig.telefone, input.telefone), eq(conversasConfig.numeroId, input.numeroId)));
     return { telefone: input.telefone };
   }),

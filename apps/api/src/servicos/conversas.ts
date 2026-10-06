@@ -23,7 +23,7 @@ import {
   LIMITE_LEGENDA_IMAGEM,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gt, isNull, lte, max, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, max, sql, type SQL } from "drizzle-orm";
 import { getMensagemSaidaQueue } from "../queue.js";
 
 const MAX_RESPOSTAS_NA_CONVERSA = 300;
@@ -315,8 +315,12 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
 export async function passarParaHumano(db: Db, telefone: string, numeroId: number, motivo: string): Promise<void> {
   await db
     .insert(conversasConfig)
-    .values({ telefone, numeroId, precisaHumano: true, motivoHumano: motivo.slice(0, 500) })
-    .onConflictDoUpdate({ target: conversasConfig.telefone,  set: { precisaHumano: true, motivoHumano: motivo.slice(0, 500) } });
+    .values({ telefone, numeroId, precisaHumano: true, motivoHumano: motivo.slice(0, 500), humanoPedidoEm: new Date() })
+    .onConflictDoUpdate({
+      target: [conversasConfig.numeroId, conversasConfig.telefone],
+      // Pedido repetido mantém o horário do primeiro: o aviso do painel não "renasce" a cada mensagem.
+      set: { precisaHumano: true, motivoHumano: motivo.slice(0, 500), humanoPedidoEm: sql`coalesce(${conversasConfig.humanoPedidoEm}, now())` },
+    });
 }
 
 // "Excluir conversa": some de Conversas e do Funil, e o bot/IA passam a ler a conversa vazia. Nada de
@@ -343,7 +347,7 @@ export async function excluirConversa(db: Db, telefone: string, numeroId: number
     await tx.delete(duvidasIa).where(and(eq(duvidasIa.telefone, telefone), eq(duvidasIa.numeroId, numeroId)));
     await tx
       .update(conversasConfig)
-      .set({ precisaHumano: false, motivoHumano: null })
-      .where(eq(conversasConfig.telefone, telefone));
+      .set({ precisaHumano: false, motivoHumano: null, humanoPedidoEm: null })
+      .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
   });
 }

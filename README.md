@@ -179,9 +179,21 @@ Um agente com o Claude (Anthropic) escreve **rascunhos** de resposta nas convers
 
 Ao ligar a IA numa conversa em que o cliente está esperando, ela já sugere na hora; o botão **Pedir sugestão agora** faz o mesmo a qualquer momento.
 
-### Por que ela só liga na mão
+### Quando a IA liga e desliga
 
-O número de WhatsApp é compartilhado com outro sistema, que atende os próprios clientes. Se a IA ficasse ligada por padrão, ela sugeriria respostas para conversas que não são nossas — por isso cada conversa é ligada individualmente, e o webhook só aciona a IA onde ela está ligada.
+- **Liga sozinha** assim que o cliente escreve, para o atendimento seguir sem esperar ninguém.
+- **Desliga só em três casos**, e não volta sozinha:
+  - alguém da equipe desliga à mão na conversa (a escolha fica guardada; para voltar, é preciso religar à mão);
+  - o cliente pede para falar com uma pessoa;
+  - o bot não sabe responder.
+- Nos dois últimos casos a conversa fica marcada como **precisa de humano**, e o bot não responde até alguém clicar em **Marcar como resolvida**.
+- Quem está com o painel aberto, em qualquer tela, é avisado assim:
+  - aparece um aviso no canto da tela, com o motivo e há quanto tempo o cliente espera;
+  - toca um som curto;
+  - o título da aba mostra quantos clientes estão esperando;
+  - o menu Conversas mostra o selo 🙋;
+  - se a permissão estiver liberada, chega uma notificação do navegador mesmo com a aba em segundo plano.
+- Se a Meta reenviar a mesma mensagem, ela é ignorada, e o bot não responde duas vezes.
 
 ### Base de conhecimento
 

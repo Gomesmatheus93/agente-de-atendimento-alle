@@ -42,7 +42,7 @@ export const funilRouter = router({
       ctx.db.select().from(funilClientes),
       telefones.length ? ctx.db.select().from(contatos).where(inArray(contatos.telefone, telefones)) : [],
       telefones.length
-        ? ctx.db.select({ telefone: conversasConfig.telefone, precisaHumano: conversasConfig.precisaHumano }).from(conversasConfig).where(inArray(conversasConfig.telefone, telefones))
+        ? ctx.db.select({ telefone: conversasConfig.telefone, numeroId: conversasConfig.numeroId, precisaHumano: conversasConfig.precisaHumano }).from(conversasConfig).where(inArray(conversasConfig.telefone, telefones))
         : [],
       ctx.db.select().from(conversasExcluidas),
     ]);
@@ -53,7 +53,7 @@ export const funilRouter = router({
     const textoPorId = new Map(ultimas.map((linha) => [linha.id, linha.tipo === "texto" ? linha.texto : `[${linha.tipo}]`]));
     const funilPorConversa = new Map(funil.map((linha) => [`${linha.numeroId}:${linha.telefone}`, linha]));
     const nomePorTelefone = new Map(nomes.map((linha) => [linha.telefone, linha.nomePerfil]));
-    const humanoPorTelefone = new Map(configs.map((linha) => [linha.telefone, linha.precisaHumano]));
+    const humanoPorConversa = new Map(configs.map((linha) => [`${linha.numeroId}:${linha.telefone}`, linha.precisaHumano]));
 
     const cards = conversas
       .filter((conversa) => {
@@ -71,7 +71,7 @@ export const funilRouter = router({
         ultimaEm: conversa.ultimaEm?.toISOString() ?? null,
         mensagens: conversa.mensagens,
         naoLidas: conversa.naoLidas,
-        precisaHumano: humanoPorTelefone.get(conversa.telefone) ?? false,
+        precisaHumano: humanoPorConversa.get(`${conversa.numeroId}:${conversa.telefone}`) ?? false,
         etapa: (situacao?.etapa ?? "em_conversa") as EtapaFunil,
         etapaOrigem: situacao?.etapaOrigem ?? null,
         motivoPerda: situacao?.motivoPerda ?? null,

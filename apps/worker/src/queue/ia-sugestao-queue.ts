@@ -17,7 +17,7 @@ import {
   type IaSugestaoJobData,
 } from "@atendimento-academias/shared";
 import { Worker } from "bullmq";
-import { and, desc, eq, gt, max } from "drizzle-orm";
+import { and, desc, eq, gt, max, sql } from "drizzle-orm";
 import type { AgenteAtendimento, MensagemDaConversa } from "../ia/agenteAtendimento.js";
 import { getRedisConnection } from "./connection.js";
 
@@ -113,7 +113,11 @@ async function sugerirResposta(db: Db, agente: AgenteAtendimento, telefone: stri
     if (resultado.tipo === "humano") {
       await tx
         .update(conversasConfig)
-        .set({ precisaHumano: true, motivoHumano: resultado.motivo.slice(0, 500) })
+        .set({
+          precisaHumano: true,
+          motivoHumano: resultado.motivo.slice(0, 500),
+          humanoPedidoEm: sql`coalesce(${conversasConfig.humanoPedidoEm}, now())`,
+        })
         .where(and(eq(conversasConfig.telefone, telefone), eq(conversasConfig.numeroId, numeroId)));
       return;
     }
