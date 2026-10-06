@@ -5,6 +5,7 @@ import { z } from "zod";
 import { unidadeDaChaveIntegracao } from "../config/plataforma.js";
 import { criarCampanha } from "../servicos/campanhas.js";
 import { enviarMensagem, garantirNumeroDaUnidade, obterConversa, passarParaHumano } from "../servicos/conversas.js";
+import { chaveBloqueada, registrarFalhaDeChave } from "../seguranca.js";
 import { getDb } from "../trpc/context.js";
 import { midiasAgente } from "@atendimento-academias/db";
 import { and, eq } from "drizzle-orm";
@@ -25,11 +26,17 @@ export function criarRouterIntegracoes(): Router {
   router.use(express.json({ limit: "1mb" }));
 
   router.use(async (req, res, next) => {
+    const ip = req.ip ?? "desconhecido";
+    if (chaveBloqueada(ip)) {
+      res.status(429).json({ error: "Muitas chaves inválidas. Tente de novo em alguns minutos." });
+      return;
+    }
     const cabecalho = req.header("authorization") ?? "";
     const chave = cabecalho.startsWith("Bearer ") ? cabecalho.slice("Bearer ".length).trim() : null;
 
     const unidadeId = await unidadeDaChaveIntegracao(getDb(), chave);
     if (unidadeId === null) {
+      registrarFalhaDeChave(ip);
       res.status(401).json({ error: "Chave de integração ausente ou inválida (header Authorization: Bearer <chave>)." });
       return;
     }
