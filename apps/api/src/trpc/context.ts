@@ -48,9 +48,14 @@ async function usuarioDaRequisicao(db: Db, token: string | null): Promise<Usuari
   return linha ?? null;
 }
 
+// Usado também fora do tRPC (arquivos de /uploads), que exigem a mesma sessão.
+export function usuarioDoCookie(cabecalhoCookie: string | undefined): Promise<UsuarioDaSessao | null> {
+  return usuarioDaRequisicao(getDb(), lerCookie(cabecalhoCookie, COOKIE_SESSAO));
+}
+
 export async function createContext({ req, res }: trpcExpress.CreateExpressContextOptions) {
   const db = getDb();
-  const usuario = await usuarioDaRequisicao(db, lerCookie(req.headers.cookie, COOKIE_SESSAO));
+  const usuario = await usuarioDoCookie(req.headers.cookie);
 
   return { req, res, db, usuario };
 }

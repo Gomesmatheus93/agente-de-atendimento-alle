@@ -15,9 +15,20 @@ type Agente = SaidaApi["configuracoes"]["listar"]["agente"];
 export function Configuracoes() {
   const utils = trpc.useUtils();
   const configuracao = trpc.configuracoes.listar.useQuery();
+  const estado = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 });
   const recarregar = () => void utils.configuracoes.listar.invalidate();
 
-  if (configuracao.isPending) return <p className="text-sm text-ink-2">Carregando…</p>;
+  if (configuracao.isPending || estado.isPending) return <p className="text-sm text-ink-2">Carregando…</p>;
+
+  // A API já recusa as alterações de quem não é admin; aqui só evita mostrar formulários que não vão salvar.
+  if (estado.data?.usuario?.papel !== "admin") {
+    return (
+      <p role="note" className="rounded-xl border border-card-border bg-surface px-4 py-3 text-sm text-ink-2">
+        As configurações (contas do WhatsApp, webhook, chave de integração e agente) só podem ser alteradas por um
+        administrador.
+      </p>
+    );
+  }
 
   const dados = configuracao.data;
   if (!dados) return <p className="text-sm text-ink-2">Não foi possível carregar as configurações.</p>;

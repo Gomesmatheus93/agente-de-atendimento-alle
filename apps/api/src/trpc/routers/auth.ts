@@ -4,9 +4,13 @@ import { criarPrimeiroUsuarioInputSchema, entrarInputSchema } from "@atendimento
 import { TRPCError } from "@trpc/server";
 import { count, eq, lt } from "drizzle-orm";
 import { COOKIE_SESSAO, type Context } from "../context.js";
+import { limparFalhas, minutosBloqueado, registrarFalha } from "../limiteDeLogin.js";
 import { procedimentoAutenticado, publicProcedure, router } from "../trpc.js";
 
 const DURACAO_SESSAO_MS = 30 * 86_400_000;
+
+// No servidor o painel é https: o cookie só viaja criptografado. Em desenvolvimento é http, então sem Secure.
+const ATRIBUTOS_COOKIE = `HttpOnly; SameSite=Lax; Path=/${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
 
 // Mesma resposta para e-mail inexistente e senha errada: não entrega quais e-mails existem.
 const CREDENCIAIS_INVALIDAS = "E-mail ou senha incorretos.";
@@ -19,11 +23,7 @@ async function abrirSessao(ctx: Context, usuarioId: number): Promise<void> {
   // Faxina barata: aproveita o login para tirar as sessões vencidas.
   await ctx.db.delete(sessoes).where(lt(sessoes.expiraEm, new Date()));
 
-  // Sem "Secure" porque o painel roda em http no seu computador; ao publicar em https, acrescente.
-  ctx.res.appendHeader(
-    "Set-Cookie",
-    `${COOKIE_SESSAO}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(DURACAO_SESSAO_MS / 1000)}`,
-  );
+  ctx.res.appendHeader("Set-Cookie", `${COOKIE_SESSAO}=${token}; ${ATRIBUTOS_COOKIE}; Max-Age=${Math.floor(DURACAO_SESSAO_MS / 1000)}`);
 }
 
 async function contarUsuarios(ctx: Context): Promise<number> {
@@ -54,13 +54,24 @@ export const authRouter = router({
   }),
 
   entrar: publicProcedure.input(entrarInputSchema).mutation(async ({ ctx, input }) => {
+    const ip = ctx.req.ip ?? "desconhecido";
+    const espera = minutosBloqueado(ip, input.email);
+    if (espera !== null) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `Muitas tentativas erradas. Tente de novo em ${espera} minuto${espera > 1 ? "s" : ""}.`,
+      });
+    }
+
     const [usuario] = await ctx.db.select().from(usuarios).where(eq(usuarios.email, input.email));
 
     // Confere a senha mesmo sem usuário seria ideal contra medir tempo; aqui o ganho não paga a complexidade.
     if (!usuario || !usuario.ativo || !(await senhaConfere(input.senha, usuario.senhaHash))) {
+      registrarFalha(ip, input.email);
       throw new TRPCError({ code: "UNAUTHORIZED", message: CREDENCIAIS_INVALIDAS });
     }
 
+    limparFalhas(ip, input.email);
     await abrirSessao(ctx, usuario.id);
     return { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel };
   }),
@@ -74,7 +85,7 @@ export const authRouter = router({
       ?.slice(COOKIE_SESSAO.length + 1);
 
     if (token) await ctx.db.delete(sessoes).where(eq(sessoes.token, token));
-    ctx.res.appendHeader("Set-Cookie", `${COOKIE_SESSAO}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+    ctx.res.appendHeader("Set-Cookie", `${COOKIE_SESSAO}=; ${ATRIBUTOS_COOKIE}; Max-Age=0`);
     return { ok: true };
   }),
 });

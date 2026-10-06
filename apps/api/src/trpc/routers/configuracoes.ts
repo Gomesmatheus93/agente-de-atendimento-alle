@@ -40,7 +40,7 @@ import {
   subirImagemParaHandle,
 } from "../../meta/graph.js";
 import { salvarBuffer } from "../../media/armazenamento.js";
-import { procedimentoAutenticado, router } from "../trpc.js";
+import { procedimentoAdmin, procedimentoAutenticado, router } from "../trpc.js";
 
 export function erroDaMeta(erro: unknown): TRPCError {
   if (erro instanceof ErroGraph) {
@@ -110,6 +110,8 @@ export const CATEGORIA_POR_NOME: Record<string, "marketing" | "utilidade" | "aut
   SERVICE: "servico",
 };
 
+// Ler (números, templates, perfil) é de todos; mudar credenciais, webhook, chave de integração, comportamento
+// do agente e o perfil público do número é só de administrador.
 export const configuracoesRouter = router({
   listar: procedimentoAutenticado.query(async ({ ctx }) => {
     const contas = await ctx.db.select().from(contasWhatsapp).orderBy(asc(contasWhatsapp.nome));
@@ -147,8 +149,8 @@ export const configuracoesRouter = router({
           })),
       })),
       webhook: {
-        // O token de verificação é digitado igual no painel da Meta, então pode aparecer na tela.
-        verifyToken: verifyToken ?? null,
+        // O token de verificação é digitado igual no painel da Meta, então aparece na tela — só para admin.
+        verifyToken: ctx.usuario.papel === "admin" ? (verifyToken ?? null) : null,
         // O segredo do app não: só dizemos se existe.
         appSecretConfigurado: appSecret !== null,
       },
@@ -160,7 +162,7 @@ export const configuracoesRouter = router({
   }),
 
   // Cadastra ou atualiza uma conta. O token é testado na Meta antes de salvar: se não funcionar, nada é gravado.
-  salvarConta: procedimentoAutenticado.input(salvarContaInputSchema).mutation(async ({ ctx, input }) => {
+  salvarConta: procedimentoAdmin.input(salvarContaInputSchema).mutation(async ({ ctx, input }) => {
     const [existente] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.wabaId, input.wabaId));
 
     const token = input.token ?? (existente ? decifrar(existente.tokenCifrado) : null);
@@ -216,12 +218,12 @@ export const configuracoesRouter = router({
     }
   }),
 
-  definirNumeroAtivo: procedimentoAutenticado.input(definirNumeroAtivoInputSchema).mutation(async ({ ctx, input }) => {
+  definirNumeroAtivo: procedimentoAdmin.input(definirNumeroAtivoInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.update(numerosWhatsapp).set({ ativo: input.ativo }).where(eq(numerosWhatsapp.id, input.numeroId));
     return { numeroId: input.numeroId, ativo: input.ativo };
   }),
 
-  removerConta: procedimentoAutenticado.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+  removerConta: procedimentoAdmin.input(contaInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.delete(contasWhatsapp).where(eq(contasWhatsapp.id, input.contaId));
     return { contaId: input.contaId };
   }),
@@ -306,7 +308,7 @@ export const configuracoesRouter = router({
     };
   }),
 
-  salvarPerfilDoNumero: procedimentoAutenticado.input(salvarPerfilNumeroInputSchema).mutation(async ({ ctx, input }) => {
+  salvarPerfilDoNumero: procedimentoAdmin.input(salvarPerfilNumeroInputSchema).mutation(async ({ ctx, input }) => {
     const { numero, token } = await numeroComToken(ctx.db, input.numeroId);
     try {
       // A foto vai pela Resumable Upload API; o perfil recebe só o handle devolvido.
@@ -334,7 +336,7 @@ export const configuracoesRouter = router({
   ),
 
   // Salvar com um nome que já existe troca a imagem: o n8n continua pedindo pelo mesmo nome.
-  salvarMidiaAgente: procedimentoAutenticado.input(salvarMidiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  salvarMidiaAgente: procedimentoAdmin.input(salvarMidiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
     const salvo = await salvarBuffer(Buffer.from(input.imagem.base64, "base64"), input.imagem.mimeType);
     const valores = { midiaUrl: salvo.url, mimeType: input.imagem.mimeType, descricao: input.descricao || null };
     await ctx.db
@@ -344,12 +346,12 @@ export const configuracoesRouter = router({
     return { chave: input.chave };
   }),
 
-  removerMidiaAgente: procedimentoAutenticado.input(midiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  removerMidiaAgente: procedimentoAdmin.input(midiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.delete(midiasAgente).where(eq(midiasAgente.chave, input.chave));
     return { ok: true };
   }),
 
-  salvarWebhook: procedimentoAutenticado.input(salvarWebhookInputSchema).mutation(async ({ ctx, input }) => {
+  salvarWebhook: procedimentoAdmin.input(salvarWebhookInputSchema).mutation(async ({ ctx, input }) => {
     if (input.verifyToken) await salvarConfiguracao(ctx.db, CHAVE_WEBHOOK_VERIFY_TOKEN, input.verifyToken, false);
     if (input.appSecret) await salvarConfiguracao(ctx.db, CHAVE_WEBHOOK_APP_SECRET, input.appSecret, true);
     return { ok: true };
@@ -357,16 +359,16 @@ export const configuracoesRouter = router({
 
   // Gera uma chave nova para sistemas externos (n8n, Zapier, etc.) chamarem /integracoes/*. Uma chave
   // nova invalida a anterior; a tela mostra o valor uma única vez, nesta resposta.
-  gerarChaveIntegracao: procedimentoAutenticado.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db)),
+  gerarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db)),
 
-  revogarChaveIntegracao: procedimentoAutenticado.mutation(async ({ ctx }) => {
+  revogarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => {
     await revogarChaveIntegracao(ctx.db);
     return { ok: true };
   }),
 
   // Escolhe quem responde quando a IA está ligada numa conversa: o agente interno (Claude, vira
   // rascunho) ou o webhook do n8n (responde direto). Ver acionarAgenteSeLigado no webhook.
-  salvarModoAgente: procedimentoAutenticado.input(salvarModoAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  salvarModoAgente: procedimentoAdmin.input(salvarModoAgenteInputSchema).mutation(async ({ ctx, input }) => {
     if (input.modo === "n8n" && !input.webhookN8nUrl) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a URL do webhook do n8n para usar esse modo." });
     }
