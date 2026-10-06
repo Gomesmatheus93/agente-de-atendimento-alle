@@ -55,10 +55,18 @@ painel.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// No servidor (easypanel) há um domínio só, apontado para o painel: o webhook da Meta e a API do n8n
+// respondem também por aqui (https://<domínio>/webhooks/whatsapp e /integracoes). As duas rotas já
+// têm autenticação própria (assinatura da Meta / chave de integração), como no servidor do webhook.
+if (process.env.NODE_ENV === "production") {
+  painel.use("/webhooks/whatsapp", criarWebhookWhatsapp());
+  painel.use("/integracoes", criarRouterIntegracoes());
+}
+
 if (webDist && existsSync(path.join(webDist, "index.html"))) {
   painel.use(express.static(webDist, { index: false, maxAge: "1h" }));
   // A navegação do painel é por hash (#/...): qualquer outro GET devolve a página principal.
-  painel.get(/^\/(?!trpc|uploads|health).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+  painel.get(/^\/(?!trpc|uploads|health|webhooks|integracoes).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
   console.log(`painel web servido de ${webDist}`);
 }
 
