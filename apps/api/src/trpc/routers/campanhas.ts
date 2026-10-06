@@ -132,6 +132,8 @@ export const campanhasRouter = router({
         statusEnvio: disparoDestinatarios.statusEnvio,
         erroDetalhe: disparoDestinatarios.erroDetalhe,
         enviadoEm: disparoDestinatarios.enviadoEm,
+        entregueEm: disparoDestinatarios.entregueEm,
+        lidaEm: disparoDestinatarios.lidaEm,
         parametros: disparoDestinatarios.parametros,
       })
       .from(disparoDestinatarios)
@@ -139,9 +141,14 @@ export const campanhasRouter = router({
       .orderBy(asc(disparoDestinatarios.id));
 
     const progresso = progressoVazio();
+    // Checks do WhatsApp: quantos chegaram no aparelho e quantos o cliente abriu (lida conta como entregue).
+    let entregues = 0;
+    let lidas = 0;
     for (const destinatario of destinatarios) {
       progresso[destinatario.statusEnvio] += 1;
       progresso.total += 1;
+      if (destinatario.statusEnvio === "enviado" && (destinatario.entregueEm || destinatario.lidaEm)) entregues += 1;
+      if (destinatario.statusEnvio === "enviado" && destinatario.lidaEm) lidas += 1;
     }
 
     const { templateConteudo, custoUnitario, ...dadosCampanha } = campanha;
@@ -153,6 +160,8 @@ export const campanhasRouter = router({
       // Todos os destinatários de uma campanha compartilham os mesmos parâmetros.
       mensagem: preencherTemplate(templateConteudo, destinatarios[0]?.parametros ?? {}),
       progresso,
+      entregues,
+      lidas,
       destinatarios: destinatarios.map(({ parametros: _parametros, ...destinatario }) => destinatario),
     };
   }),

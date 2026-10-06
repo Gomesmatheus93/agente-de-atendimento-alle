@@ -57,6 +57,8 @@ async function processarDestinatario(db: Db, providers: FabricaDeProviders, dest
       tentativas: destinatario.tentativas + 1,
       erroDetalhe: resultado.sucesso ? null : (resultado.erro ?? "Falha desconhecida"),
       enviadoEm: resultado.sucesso ? new Date() : null,
+      // Os avisos de entregue/lida chegam pelo webhook com esse id.
+      mensagemExternaId: resultado.mensagemId ?? null,
     })
     .where(eq(disparoDestinatarios.id, destinatarioId));
 

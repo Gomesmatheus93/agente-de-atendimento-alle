@@ -1,4 +1,4 @@
-import { integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { timestamps } from "./columns.js";
 import { statusEnvioEnum } from "./enums.js";
 import { campanhasDisparo } from "./campanhasDisparo.js";
@@ -17,6 +17,10 @@ export const disparoDestinatarios = pgTable(
     tentativas: integer("tentativas").notNull().default(0),
     erroDetalhe: text("erro_detalhe"),
     enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    // Id da mensagem na Meta (wamid): é por ele que chegam pelo webhook os avisos de entregue e lida.
+    mensagemExternaId: varchar("mensagem_externa_id", { length: 191 }),
+    entregueEm: timestamp("entregue_em", { withTimezone: true }),
+    lidaEm: timestamp("lida_em", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => ({
@@ -24,5 +28,6 @@ export const disparoDestinatarios = pgTable(
       table.campanhaId,
       table.telefone,
     ),
+    mensagemExternaIdx: index("disparo_destinatarios_mensagem_externa_idx").on(table.mensagemExternaId),
   }),
 );

@@ -154,6 +154,17 @@ Preenchida, só os telefones da lista recebem; qualquer outro destinatário é m
 
 No `.env` da raiz, já deixa os telefones na caixa de destinatários de **Nova campanha**, para não digitar o próprio número a cada teste. Vírgula separa mais de um; vazio em produção.
 
+### Checks do WhatsApp (entregue e lida)
+
+A Meta avisa pelo mesmo webhook o que aconteceu com cada mensagem que enviamos, e o painel mostra como no WhatsApp:
+
+- **✓ Enviada:** a Meta aceitou a mensagem.
+- **✓✓ Entregue:** a mensagem chegou no aparelho do cliente.
+- **✓✓ azul, Lida:** o cliente abriu a mensagem. Só aparece se ele não desligou a confirmação de leitura no WhatsApp; nesse caso fica em "Entregue".
+- **Falhou depois de aceita:** por exemplo, número sem WhatsApp (131026) ou limite de marketing por pessoa (131049). A mensagem vira falha com o motivo em português e deixa de contar no custo da campanha.
+
+Vale para as respostas pelo painel e pelo bot (`mensagens_saida`) e para os disparos de campanha (`disparo_destinatarios`). O id da Meta (`mensagem_externa_id`) é o que liga o aviso à mensagem. O detalhe da campanha mostra quantos foram entregues e lidos. Disparos feitos antes desta versão não guardaram o id e ficam sem os checks.
+
 ### Webhook de recebimento
 
 A Meta precisa alcançar `POST /webhooks/whatsapp` por HTTPS público. Em desenvolvimento, um túnel resolve:

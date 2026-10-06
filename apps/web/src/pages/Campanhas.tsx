@@ -22,6 +22,7 @@ import { hrefDe } from "../lib/route.js";
 import { trpc, type SaidaApi } from "../lib/trpc.js";
 
 const INTERVALO_POLLING_MS = 2000;
+const INTERVALO_CHECKS_MS = 30_000;
 const INTERVALO_AGENDADAS_MS = 15_000;
 
 export function Campanhas({ campanhaId }: { campanhaId: number | null }) {
@@ -375,7 +376,12 @@ function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
   const detalheQuery = trpc.campanhas.detalhe.useQuery(
     { id: campanhaId },
     {
-      refetchInterval: (query) => (query.state.data?.status === "enviando" ? INTERVALO_POLLING_MS : false),
+      // Depois do envio, as confirmações de entregue/lida continuam chegando (às vezes horas depois).
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        if (status === "enviando") return INTERVALO_POLLING_MS;
+        return status === "agendada" ? false : INTERVALO_CHECKS_MS;
+      },
       retry: (tentativas, erro) => erro.data?.code !== "NOT_FOUND" && tentativas < 2,
     },
   );
@@ -437,8 +443,20 @@ function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
 
         <div className="flex flex-col gap-3">
           <ProgressBar enviado={progresso.enviado} falhou={progresso.falhou} pendente={progresso.pendente} />
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
             <Indicador rotulo="Enviados" valor={formatarNumero(progresso.enviado)} apoio={`de ${formatarNumero(progresso.total)}`} cor="bg-status-enviado" />
+            <Indicador
+              rotulo="Entregues"
+              valor={formatarNumero(campanha.entregues)}
+              apoio={progresso.enviado > 0 ? `${formatarPercentual(campanha.entregues / progresso.enviado)} dos enviados` : undefined}
+              cor="bg-slate-400"
+            />
+            <Indicador
+              rotulo="Lidas"
+              valor={formatarNumero(campanha.lidas)}
+              apoio={progresso.enviado > 0 ? `${formatarPercentual(campanha.lidas / progresso.enviado)} dos enviados` : undefined}
+              cor="bg-sky-500"
+            />
             <Indicador rotulo="Falhas" valor={formatarNumero(progresso.falhou)} cor="bg-status-falhou" />
             <Indicador rotulo="Pendentes" valor={formatarNumero(progresso.pendente)} cor="bg-status-pendente" />
             <Indicador
@@ -470,8 +488,7 @@ function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
                     <StatusBadge status={destinatario.statusEnvio} />
                   </td>
                   <td className="px-4 py-2.5 text-xs text-ink-2">
-                    {destinatario.erroDetalhe ??
-                      (destinatario.enviadoEm ? `Enviado às ${new Date(destinatario.enviadoEm).toLocaleTimeString("pt-BR")}` : "")}
+                    {destinatario.erroDetalhe ?? <SituacaoDeEntrega destinatario={destinatario} />}
                   </td>
                 </tr>
               ))}
@@ -481,6 +498,33 @@ function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
       </Card>
     </div>
   );
+}
+
+// Checks do WhatsApp por destinatário: o passo mais avançado que a Meta confirmou.
+function SituacaoDeEntrega({ destinatario }: { destinatario: { enviadoEm: string | null; entregueEm: string | null; lidaEm: string | null } }) {
+  const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  if (destinatario.lidaEm) {
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-sky-600">
+        <Icone nome="checkDuplo" tamanho={14} /> Lida em {hora(destinatario.lidaEm)}
+      </span>
+    );
+  }
+  if (destinatario.entregueEm) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Icone nome="checkDuplo" tamanho={14} /> Entregue em {hora(destinatario.entregueEm)}
+      </span>
+    );
+  }
+  if (destinatario.enviadoEm) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Icone nome="check" tamanho={12} /> Enviada em {hora(destinatario.enviadoEm)}
+      </span>
+    );
+  }
+  return null;
 }
 
 function Indicador({ rotulo, valor, apoio, cor }: { rotulo: string; valor: string; apoio?: string; cor: string }) {

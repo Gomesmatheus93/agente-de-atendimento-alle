@@ -24,7 +24,7 @@ import {
   LIMITE_LEGENDA_IMAGEM,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gt, isNull, lte, max, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, lte, max, sql, type SQL } from "drizzle-orm";
 import { getMensagemSaidaQueue } from "../queue.js";
 
 const MAX_RESPOSTAS_NA_CONVERSA = 300;
@@ -44,6 +44,9 @@ export interface MensagemDaConversa {
   status: StatusEnvio | null;
   erro: string | null;
   respostaId: number | null;
+  // Checks do WhatsApp (só nas mensagens que enviamos): chegou no aparelho / o cliente abriu.
+  entregueEm: string | null;
+  lidaEm: string | null;
 }
 
 // Toda rota que recebe um número (tela ou integração) passa por aqui: número de outra unidade é tratado
@@ -205,6 +208,10 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       .select({
         id: disparoDestinatarios.id,
         em: disparoDestinatarios.enviadoEm,
+        statusEnvio: disparoDestinatarios.statusEnvio,
+        erro: disparoDestinatarios.erroDetalhe,
+        entregueEm: disparoDestinatarios.entregueEm,
+        lidaEm: disparoDestinatarios.lidaEm,
         parametros: disparoDestinatarios.parametros,
         campanhaId: campanhasDisparo.id,
         campanhaNome: campanhasDisparo.nome,
@@ -216,7 +223,8 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       .where(
         and(
           eq(disparoDestinatarios.telefone, telefone),
-          eq(disparoDestinatarios.statusEnvio, "enviado"),
+          // Aceito pela Meta em algum momento (inclui o que ela depois avisou que não entregou).
+          isNotNull(disparoDestinatarios.enviadoEm),
           eq(campanhasDisparo.numeroId, numeroId),
           depoisDaExclusao(disparoDestinatarios.enviadoEm),
         ),
@@ -262,6 +270,8 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       status: null,
       erro: null,
       respostaId: null,
+      entregueEm: null,
+      lidaEm: null,
     })),
     ...envios.flatMap((envio): MensagemDaConversa[] =>
       envio.em
@@ -276,9 +286,11 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
               em: envio.em.toISOString(),
               campanhaId: envio.campanhaId,
               campanhaNome: envio.campanhaNome,
-              status: null,
-              erro: null,
+              status: envio.statusEnvio,
+              erro: envio.erro,
               respostaId: null,
+              entregueEm: envio.entregueEm?.toISOString() ?? null,
+              lidaEm: envio.lidaEm?.toISOString() ?? null,
             },
           ]
         : [],
@@ -297,6 +309,8 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
         status: saida.statusEnvio,
         erro: saida.erroDetalhe,
         respostaId: saida.id,
+        entregueEm: saida.entregueEm?.toISOString() ?? null,
+        lidaEm: saida.lidaEm?.toISOString() ?? null,
       }),
     ),
   ].sort((a, b) => a.em.localeCompare(b.em) || a.id.localeCompare(b.id));

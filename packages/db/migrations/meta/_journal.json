@@ -57,6 +57,13 @@
       "when": 1791294741860,
       "tag": "0007_remove_fila_de_atendimento",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791294961368,
+      "tag": "0008_checks_de_entrega_e_leitura",
+      "breakpoints": true
     }
   ]
 }

@@ -50,6 +50,13 @@ const ICONES = {
     </>
   ),
   check: <path d="M20 6 9 17l-5-5" />,
+  // Dois tracinhos, como o "entregue/lida" do WhatsApp.
+  checkDuplo: (
+    <>
+      <path d="M1.5 12.5 6 17 16.5 6.5" />
+      <path d="m11 16 1 1L22.5 6.5" />
+    </>
+  ),
   funil: <path d="M3 4h18l-7 8.5V19l-4 2v-8.5Z" />,
   documento: (
     <>

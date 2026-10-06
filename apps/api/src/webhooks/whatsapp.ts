@@ -4,6 +4,7 @@ import {
   contatos,
   conversasConfig,
   disparoDestinatarios,
+  mensagensSaida,
   respostasClientes,
   templatesWhatsapp,
   contasWhatsapp,
@@ -11,6 +12,7 @@ import {
 } from "@atendimento-academias/db";
 import { IA_SUGESTAO_ATRASO_MS, type TipoMensagem } from "@atendimento-academias/shared";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import express, { type Request, type Router } from "express";
 import { z } from "zod";
 import {
@@ -55,6 +57,7 @@ const payloadSchema = z.object({
                   z.object({
                     id: z.string(),
                     status: z.string(),
+                    timestamp: z.string().optional(),
                     recipient_id: z.string().optional(),
                     errors: z
                       .array(
@@ -324,6 +327,71 @@ async function registrarResposta(
   return { telefone, nova: gravada.length > 0 };
 }
 
+type Situacao = NonNullable<z.infer<typeof payloadSchema>["entry"][number]["changes"][number]["value"]["statuses"]>[number];
+
+// Erros mais comuns depois que a Meta aceitou a mensagem, no texto que a equipe entende.
+const ERRO_DE_ENTREGA: Record<number, string> = {
+  131026: "Não foi entregue: o número não tem WhatsApp ou não pode receber mensagens.",
+  131047: "Não foi entregue: a janela de 24h já tinha fechado.",
+  131049: "A Meta segurou esta mensagem de marketing para não cansar o cliente (limite por pessoa). Tente mais tarde.",
+  131050: "O cliente escolheu parar de receber mensagens de marketing desta empresa.",
+  130472: "A Meta não entregou: o número faz parte de um experimento do WhatsApp.",
+  131021: "Não foi entregue: remetente e destinatário são o mesmo número.",
+};
+
+function descreverFalha(situacao: Situacao): string {
+  const erro = situacao.errors?.[0];
+  if (erro?.code !== undefined && ERRO_DE_ENTREGA[erro.code]) return ERRO_DE_ENTREGA[erro.code]!;
+  const texto = [erro?.title, erro?.error_data?.details].filter(Boolean).join(" — ");
+  return `A Meta não entregou${erro?.code !== undefined ? ` (erro ${erro.code})` : ""}${texto ? `: ${texto}` : "."}`.slice(0, 1000);
+}
+
+// Os "checks" do WhatsApp: a Meta avisa quando a mensagem chegou no aparelho (delivered), quando o cliente
+// abriu (read) e quando não conseguiu entregar (failed). Vale para respostas pelo painel/bot e para os
+// disparos de campanha; só mexe em mensagens do número que recebeu o evento. Devolve quantas achou.
+async function registrarSituacaoDeEntrega(db: Db, numeroId: number, situacao: Situacao): Promise<number> {
+  const em = (situacao.timestamp ? new Date(Number(situacao.timestamp) * 1000) : new Date()).toISOString();
+  // Chegam fora de ordem às vezes (lida antes de entregue): o primeiro horário de cada uma é o que vale.
+  const primeiro = (coluna: PgColumn) =>
+    sql`coalesce(${coluna}, ${em}::timestamptz)`;
+
+  let saida: Record<string, unknown>;
+  let disparo: Record<string, unknown>;
+  if (situacao.status === "delivered") {
+    saida = { entregueEm: primeiro(mensagensSaida.entregueEm) };
+    disparo = { entregueEm: primeiro(disparoDestinatarios.entregueEm) };
+  } else if (situacao.status === "read") {
+    // Lida implica entregue (às vezes o aviso de entregue nem chega).
+    saida = { entregueEm: primeiro(mensagensSaida.entregueEm), lidaEm: primeiro(mensagensSaida.lidaEm) };
+    disparo = { entregueEm: primeiro(disparoDestinatarios.entregueEm), lidaEm: primeiro(disparoDestinatarios.lidaEm) };
+  } else if (situacao.status === "failed") {
+    // A Meta aceitou, mas não entregou: deixa de contar como enviada (e de entrar no custo da campanha).
+    saida = disparo = { statusEnvio: "falhou", erroDetalhe: descreverFalha(situacao) };
+  } else {
+    return 1; // "sent": já está marcada como enviada desde que a Meta aceitou.
+  }
+
+  const atualizadas = await db
+    .update(mensagensSaida)
+    .set(saida)
+    .where(and(eq(mensagensSaida.mensagemExternaId, situacao.id), eq(mensagensSaida.numeroId, numeroId)));
+  if (atualizadas.count > 0) return atualizadas.count;
+
+  const disparos = await db
+    .update(disparoDestinatarios)
+    .set(disparo)
+    .where(
+      and(
+        eq(disparoDestinatarios.mensagemExternaId, situacao.id),
+        sql`${disparoDestinatarios.campanhaId} in (select ${campanhasDisparo.id} from ${campanhasDisparo} where ${campanhasDisparo.numeroId} = ${numeroId})`,
+      ),
+    );
+  return disparos.count;
+}
+
+// O aviso pode chegar antes de o worker gravar o id da mensagem (a Meta é rápida): tenta de novo uma vez.
+const ESPERA_PARA_REPETIR_MS = 5000;
+
 // A Meta avisa aqui o resultado da análise de cada template (e quando ela pausa ou desativa um já aprovado).
 // O evento traz o id do template na Meta; templates importados antes de guardarmos esse id são achados
 // pelo nome + idioma dentro da conta (entry.id é o WABA). Só mexe nos templates da unidade dona da conta.
@@ -472,16 +540,25 @@ export function criarWebhookWhatsapp(): Router {
       );
       console.log(`[webhook-whatsapp] recebido: ${mensagens.length} mensagem(ns)`);
 
-      // Ainda não gravamos a situação de entrega; logar é o que permite descobrir por que uma
+      // Checks do WhatsApp (entregue, lida, falhou). O log continua: é o que permite descobrir por que uma
       // mensagem aceita pela Meta não chegou ao aparelho.
-      const situacoes = mudancas.flatMap((mudanca) => mudanca.valor.statuses ?? []);
-      for (const situacao of situacoes) {
-        const erros = (situacao.errors ?? [])
-          .map((erro) => `${erro.code ?? "?"} ${erro.title ?? ""} ${erro.message ?? ""} ${erro.error_data?.details ?? ""}`.trim())
-          .join(" | ");
-        console.log(
-          `[webhook-whatsapp] status ${situacao.status} para ${situacao.recipient_id ?? "?"} (${situacao.id})${erros ? ` -> ${erros}` : ""}`,
-        );
+      for (const mudanca of mudancas) {
+        for (const situacao of mudanca.valor.statuses ?? []) {
+          const erros = (situacao.errors ?? [])
+            .map((erro) => `${erro.code ?? "?"} ${erro.title ?? ""} ${erro.message ?? ""} ${erro.error_data?.details ?? ""}`.trim())
+            .join(" | ");
+          console.log(
+            `[webhook-whatsapp] status ${situacao.status} para ${situacao.recipient_id ?? "?"} (${situacao.id})${erros ? ` -> ${erros}` : ""}`,
+          );
+          const achadas = await registrarSituacaoDeEntrega(db, mudanca.numeroId, situacao);
+          if (achadas === 0) {
+            setTimeout(() => {
+              registrarSituacaoDeEntrega(db, mudanca.numeroId, situacao).catch((erro) =>
+                console.error(`[webhook-whatsapp] falha ao gravar status ${situacao.status} de ${situacao.id}:`, erro),
+              );
+            }, ESPERA_PARA_REPETIR_MS).unref();
+          }
+        }
       }
 
       const nomePorWaId = new Map(

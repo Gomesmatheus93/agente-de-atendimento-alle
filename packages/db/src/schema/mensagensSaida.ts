@@ -24,9 +24,14 @@ export const mensagensSaida = pgTable(
     // Id da mensagem no provedor de WhatsApp, quando ele devolve um.
     mensagemExternaId: varchar("mensagem_externa_id", { length: 191 }),
     enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    // Confirmações que a Meta manda pelo webhook (os "checks" do WhatsApp): chegou no aparelho / o cliente
+    // abriu. Lida fica vazia se o cliente desligou a confirmação de leitura no WhatsApp dele.
+    entregueEm: timestamp("entregue_em", { withTimezone: true }),
+    lidaEm: timestamp("lida_em", { withTimezone: true }),
     ...timestamps(),
   },
   (table) => ({
     telefoneIdx: index("mensagens_saida_telefone_idx").on(table.telefone, table.createdAt),
+    mensagemExternaIdx: index("mensagens_saida_mensagem_externa_idx").on(table.mensagemExternaId),
   }),
 );

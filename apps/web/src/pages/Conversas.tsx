@@ -665,12 +665,7 @@ function Balao({
             Enviando…
           </span>
         )}
-        {mensagem.status === "enviado" && (
-          <span className="inline-flex items-center gap-1 text-accent-text">
-            <Icone nome="check" tamanho={11} />
-            Enviado
-          </span>
-        )}
+        {mensagem.status === "enviado" && <ChecksDoWhatsApp mensagem={mensagem} />}
         {mensagem.campanhaId !== null && mensagem.campanhaNome && (
           <>
             <span aria-hidden="true">·</span>
@@ -681,6 +676,12 @@ function Balao({
           </>
         )}
       </p>
+
+      {falhou && mensagem.respostaId === null && (
+        <p role="alert" className="px-1 text-right text-[11px] text-red-700">
+          {mensagem.erro ?? "A Meta não entregou esta mensagem."}
+        </p>
+      )}
 
       {falhou && mensagem.respostaId !== null && (
         <p role="alert" className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 px-1 text-[11px] text-red-700">
@@ -697,6 +698,34 @@ function Balao({
         </p>
       )}
     </div>
+  );
+}
+
+// Os checks do WhatsApp, com o mesmo sentido: ✓ enviada (a Meta aceitou), ✓✓ cinza entregue no aparelho,
+// ✓✓ azul lida. "Lida" só aparece se o cliente não desligou a confirmação de leitura no WhatsApp dele.
+function ChecksDoWhatsApp({ mensagem }: { mensagem: Mensagem }) {
+  const quando = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  if (mensagem.lidaEm) {
+    return (
+      <span title={`Lida em ${quando(mensagem.lidaEm)}`} className="inline-flex items-center gap-1 font-medium text-sky-600">
+        <Icone nome="checkDuplo" tamanho={14} />
+        Lida
+      </span>
+    );
+  }
+  if (mensagem.entregueEm) {
+    return (
+      <span title={`Entregue em ${quando(mensagem.entregueEm)}`} className="inline-flex items-center gap-1">
+        <Icone nome="checkDuplo" tamanho={14} />
+        Entregue
+      </span>
+    );
+  }
+  return (
+    <span title="A Meta aceitou; ainda não confirmou a entrega no aparelho do cliente" className="inline-flex items-center gap-1">
+      <Icone nome="check" tamanho={12} />
+      Enviada
+    </span>
   );
 }
 
