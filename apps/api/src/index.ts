@@ -4,6 +4,7 @@ import * as trpcExpress from "@trpc/server/adapters/express";
 import express from "express";
 import { criarRouterIntegracoes } from "./integracoes/router.js";
 import { criarRotasInstagram } from "./instagram/conexao.js";
+import { criarAvisosDaMeta, paginaExclusao, paginaPrivacidade } from "./instagram/paginasPublicas.js";
 import { diretorioDeUploads } from "./media/armazenamento.js";
 import { cabecalhosDeSeguranca } from "./seguranca.js";
 import { createContext, usuarioDoCookie } from "./trpc/context.js";
@@ -58,6 +59,10 @@ painel.get("/health", (_req, res) => {
 
 // Conectar o Instagram de uma unidade (login do Instagram e volta com a autorização).
 painel.use("/instagram", criarRotasInstagram());
+painel.use("/instagram", criarAvisosDaMeta());
+// Páginas públicas que a Meta exige para aprovar o app (sem login).
+painel.get("/privacidade", paginaPrivacidade);
+painel.get("/exclusao-de-dados", paginaExclusao);
 
 // No servidor (easypanel) há um domínio só, apontado para o painel: o webhook da Meta e a API do n8n
 // respondem também por aqui (https://<domínio>/webhooks/whatsapp e /integracoes). As duas rotas já
@@ -70,7 +75,7 @@ if (process.env.NODE_ENV === "production") {
 if (webDist && existsSync(path.join(webDist, "index.html"))) {
   painel.use(express.static(webDist, { index: false, maxAge: "1h" }));
   // A navegação do painel é por hash (#/...): qualquer outro GET devolve a página principal.
-  painel.get(/^\/(?!trpc|uploads|health|webhooks|integracoes|instagram).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+  painel.get(/^\/(?!trpc|uploads|health|webhooks|integracoes|instagram|privacidade|exclusao-de-dados).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
   console.log(`painel web servido de ${webDist}`);
 }
 
