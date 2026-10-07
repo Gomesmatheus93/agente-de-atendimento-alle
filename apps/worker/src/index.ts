@@ -7,6 +7,7 @@ import { AgenteAtendimento } from "./ia/agenteAtendimento.js";
 import { AnalistaConversas } from "./ia/analistaConversas.js";
 import { agendarAnaliseDiaria, createAnaliseConversaWorker, createAnaliseConversasWorker } from "./queue/analise-conversas-queue.js";
 import { iniciarAgendadorDeCampanhas } from "./scheduler/campanhas-agendadas.js";
+import { agendarColetaInstagram, createInstagramColetaWorker } from "./queue/instagram-coleta-queue.js";
 import { FabricaDeProviders } from "./providers/whatsapp/fabrica.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -19,7 +20,9 @@ const providers = new FabricaDeProviders(db);
 const workers: Array<{ nome: string; worker: Worker }> = [
   { nome: "disparo-envio", worker: createDisparoWorker(db, providers) },
   { nome: "mensagem-saida", worker: createMensagemSaidaWorker(db, providers) },
+  { nome: "instagram-coleta", worker: createInstagramColetaWorker(db) },
 ];
+void agendarColetaInstagram().catch((erro) => console.error("[instagram] não foi possível agendar a coleta diária:", erro));
 
 // Sem credencial da Anthropic o resto do sistema segue funcionando; os pedidos de sugestão ficam
 // na fila e são atendidos quando o worker subir com a chave.

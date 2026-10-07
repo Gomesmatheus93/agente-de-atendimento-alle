@@ -34,6 +34,7 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
     itens: [
       { tela: "relatorios", label: "Relatórios", href: hrefDe({ tela: "relatorios" }), icone: "grafico" },
       { tela: "duvidas", label: "Dúvidas", href: hrefDe({ tela: "duvidas" }), icone: "duvida" },
+      { tela: "instagram", label: "Instagram", href: hrefDe({ tela: "instagram" }), icone: "instagram" },
     ],
   },
   {

@@ -11,3 +11,4 @@ export * from "./sugestoesIa.js";
 export * from "./usuarios.js";
 export * from "./whatsapp.js";
 export * from "./funil.js";
+export * from "./instagram.js";

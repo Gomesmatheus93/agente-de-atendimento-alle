@@ -14,6 +14,8 @@ export default defineConfig({
       "/trpc": { target: process.env.PAINEL_API_URL ?? "http://127.0.0.1:3334", changeOrigin: false },
       // Áudio de nota de voz e figurinha recebida: arquivos servidos pela API (apps/api/src/media).
       "/uploads": { target: process.env.PAINEL_API_URL ?? "http://127.0.0.1:3334", changeOrigin: false },
+      // Conectar o Instagram: o login dele volta para cá, e a API precisa do cookie de sessão.
+      "/instagram": { target: process.env.PAINEL_API_URL ?? "http://127.0.0.1:3334", changeOrigin: false },
     },
   },
 });

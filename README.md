@@ -233,6 +233,14 @@ A tela **Funil de clientes** tem um card por cliente que respondeu, nas colunas 
 - **Ranking de dúvidas:** a aba *Análise da IA* da tela Dúvidas soma os temas e mostra, em destaque, as perguntas que ficaram **sem resposta** — o que acrescentar à base de conhecimento do agente no n8n. A aba *Palavras-chave* é o ranking antigo, que não depende da IA.
 - **Precisa de `ANTHROPIC_API_KEY` no `.env` da raiz do projeto.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.
 
+## Instagram
+
+Cada unidade conecta a própria conta profissional do Instagram em **Configurações → Instagram da unidade** ("Conectar Instagram": login do Instagram, sem a senha passar pelo painel). A tela **Instagram** (menu Análise) mostra seguidores e crescimento, alcance, visualizações, visitas ao perfil, interações, cliques no link (com a variação contra o período anterior), o alcance por dia e os posts que mais alcançaram.
+
+- **Coleta (worker, `instagram-coleta`):** todo dia às 4h grava o dia anterior de cada conta (`instagram_metricas_diarias`) e renova o acesso que vence em menos de 15 dias (o token dura 60). Logo depois de conectar, busca os últimos 7 dias. A Meta só devolve parte do histórico, então os números se acumulam a partir da conexão.
+- **Métricas:** a Meta muda a lista de tempos em tempos e algumas só existem para contas maiores; a que ela recusar fica de fora sem derrubar as outras. Posts e perfil são lidos ao vivo (cache de 10–30 min).
+- **Configuração da plataforma (uma vez):** produto **Instagram** no app da Meta → "API com login do Instagram"; `INSTAGRAM_APP_ID` e `INSTAGRAM_APP_SECRET` no ambiente; URL de redirecionamento `https://<domínio>/instagram/retorno`. Com o app em desenvolvimento, só contas cadastradas como testadoras do Instagram no app conseguem conectar; para todas as unidades, é preciso a verificação da empresa e a análise do app (App Review) das permissões `instagram_business_basic`, `instagram_business_manage_insights` e `instagram_business_manage_messages` (esta já é pedida na conexão, para as DMs).
+
 ## Unidades, usuários e acesso
 
 A plataforma é distribuída por unidade (academia). Cada unidade é um painel separado, com número de WhatsApp, conversas, campanhas, templates, configurações, imagens do agente, chave de integração e equipe próprios. Nada de uma unidade aparece na outra: toda consulta da API é filtrada pela unidade de quem está logado (`ctx.unidadeId`), e as conversas pertencem à unidade pelo número (`numeros_whatsapp.unidade_id`).

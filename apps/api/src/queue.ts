@@ -1,4 +1,7 @@
 import {
+  INSTAGRAM_COLETA_JOB_NAME,
+  INSTAGRAM_COLETA_QUEUE_NAME,
+  type InstagramColetaJobData,
   ANALISE_CONVERSA_ATRASO_MS,
   ANALISE_CONVERSA_JOB_NAME,
   ANALISE_CONVERSA_QUEUE_NAME,
@@ -99,4 +102,15 @@ export function pedirAnaliseDaConversa(numeroId: number, telefone: string): void
       },
     )
     .catch((erro) => console.error(`[funil] não foi possível pedir a análise de ${telefone}:`, erro));
+}
+
+let instagramQueue: Queue<InstagramColetaJobData> | undefined;
+
+// Busca os números do Instagram de uma conta agora (depois de conectar, ou "Atualizar agora"). Um pedido
+// por conta de cada vez: cliques repetidos não empilham coletas.
+export function pedirColetaInstagram(contaId: number, dias: number): void {
+  instagramQueue ??= criarFila<InstagramColetaJobData>(INSTAGRAM_COLETA_QUEUE_NAME);
+  instagramQueue
+    .add(INSTAGRAM_COLETA_JOB_NAME, { contaId, dias }, { jobId: `instagram-${contaId}`, removeOnComplete: true, removeOnFail: true })
+    .catch((erro) => console.error(`[instagram] não foi possível pedir a coleta da conta ${contaId}:`, erro));
 }

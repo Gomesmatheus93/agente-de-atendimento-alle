@@ -64,6 +64,13 @@
       "when": 1791294961368,
       "tag": "0008_checks_de_entrega_e_leitura",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791377472560,
+      "tag": "0009_instagram",
+      "breakpoints": true
     }
   ]
 }

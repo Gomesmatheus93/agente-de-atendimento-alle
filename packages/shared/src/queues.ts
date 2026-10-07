@@ -56,3 +56,15 @@ export interface AnaliseConversaJobData {
 export function analiseConversaJobId(numeroId: number, telefone: string): string {
   return `analise-${numeroId}-${telefone}`;
 }
+
+// Instagram: coleta diária dos números de cada conta conectada (e renovação dos tokens), e coleta sob
+// demanda de uma conta (logo depois de conectar, ou "Atualizar agora").
+export const INSTAGRAM_COLETA_QUEUE_NAME = "instagram-coleta";
+export const INSTAGRAM_COLETA_JOB_NAME = "coletar";
+export const INSTAGRAM_COLETA_SCHEDULER_ID = "instagram-coleta-diaria";
+
+export interface InstagramColetaJobData {
+  // Sem conta: todas as contas, o dia de ontem (rodada diária).
+  contaId?: number;
+  dias?: number;
+}

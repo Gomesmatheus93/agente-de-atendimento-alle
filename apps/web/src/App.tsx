@@ -7,6 +7,7 @@ import { CampanhasInsights } from "./pages/CampanhasInsights.js";
 import { Configuracoes } from "./pages/Configuracoes.js";
 import { Usuarios } from "./pages/Usuarios.js";
 import { Unidades } from "./pages/Unidades.js";
+import { Instagram } from "./pages/Instagram.js";
 import { NovaCampanha } from "./pages/NovaCampanha/NovaCampanha.js";
 import { Calendario } from "./pages/Calendario.js";
 import { Conversas } from "./pages/Conversas.js";
@@ -91,6 +92,12 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
           ampla
         >
           <Campanhas campanhaId={rota.campanhaId} />
+        </Layout>
+      );
+    case "instagram":
+      return (
+        <Layout telaAtiva="instagram" titulo="Instagram" descricao="Como o Instagram da unidade está performando: alcance, seguidores e os posts que mais funcionaram." ampla>
+          <Instagram />
         </Layout>
       );
     case "campanhas-insights":

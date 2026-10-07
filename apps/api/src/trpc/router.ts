@@ -7,6 +7,7 @@ import { conversasRouter } from "./routers/conversas.js";
 import { dashboardRouter } from "./routers/dashboard.js";
 import { duvidasRouter } from "./routers/duvidas.js";
 import { funilRouter } from "./routers/funil.js";
+import { instagramRouter } from "./routers/instagram.js";
 import { relatoriosRouter } from "./routers/relatorios.js";
 import { templatesRouter } from "./routers/templates.js";
 import { unidadesRouter } from "./routers/unidades.js";
@@ -21,6 +22,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   duvidas: duvidasRouter,
   funil: funilRouter,
+  instagram: instagramRouter,
   relatorios: relatoriosRouter,
   templates: templatesRouter,
   unidades: unidadesRouter,
