@@ -233,6 +233,14 @@ A tela **Funil de clientes** tem um card por cliente que respondeu, nas colunas 
 - **Ranking de dúvidas:** a aba *Análise da IA* da tela Dúvidas soma os temas e mostra, em destaque, as perguntas que ficaram **sem resposta** — o que acrescentar à base de conhecimento do agente no n8n. A aba *Palavras-chave* é o ranking antigo, que não depende da IA.
 - **Precisa de `ANTHROPIC_API_KEY` no `.env` da raiz do projeto.** Sem ela, a análise não roda e os cards só mudam quando arrastados. Custo aproximado: US$ 0,02 a 0,04 por conversa analisada (Claude Opus 5, esforço baixo); a tela mostra o custo estimado de cada rodada.
 
+## EVO (sistema da academia)
+
+Cada unidade liga o próprio EVO (W12) em **Configurações → EVO**: o DNS da academia e a chave da API (no EVO, Configurações → Integração → API; a chave fica cifrada, e salvar já testa a conexão).
+
+- **O bot sabe quem é o cliente:** `GET /integracoes/conversas` devolve, junto da conversa, `evo.situacao` — `aluno` (com status, planos e vencimento), `lead`, `nao_cadastrado`, `nao_configurado` ou `erro` (o EVO não respondeu em 6 s; o atendimento segue). Busca por telefone (com e sem o nono dígito); `GET /integracoes/evo/cliente` aceita também `cpf` e `email`.
+- **O bot cadastra quem não está lá:** escrevendo `[CADASTRAR_EVO]{"nome":"…","cpf":"…","email":"…","nascimento":"DD/MM/AAAA"}` na resposta (como a imagem dos planos), a plataforma tira a marcação do texto e cria o cliente no EVO como **lead (prospect)**, com o WhatsApp da conversa. Também há `POST /integracoes/evo/cadastrar`. Quem já é aluno ou lead (pelo telefone, CPF ou e-mail) não é duplicado. A matrícula com plano e pagamento continua sendo feita no EVO.
+- **Painel:** a conversa mostra "Aluno ativo", "Lead no EVO" ou o botão "Cadastrar no EVO".
+
 ## Instagram
 
 Cada unidade conecta a própria conta profissional do Instagram em **Configurações → Instagram da unidade** ("Conectar Instagram": login do Instagram, sem a senha passar pelo painel). A tela **Instagram** (menu Análise) mostra seguidores e crescimento, alcance, visualizações, visitas ao perfil, interações, cliques no link (com a variação contra o período anterior), o alcance por dia e os posts que mais alcançaram.

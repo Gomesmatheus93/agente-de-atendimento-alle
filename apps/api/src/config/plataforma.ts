@@ -33,7 +33,7 @@ const cacheSegredos = new Map<number, Cache<string | null>>();
 const cacheNumeros = new Map<string, Cache<{ id: number; contaId: number; unidadeId: number } | null>>();
 const cacheTokens = new Map<number, Cache<string>>();
 
-async function lerValor(db: Db, unidadeId: number, chave: string): Promise<string | null> {
+export async function lerValor(db: Db, unidadeId: number, chave: string): Promise<string | null> {
   const [linha] = await db
     .select()
     .from(configuracoes)

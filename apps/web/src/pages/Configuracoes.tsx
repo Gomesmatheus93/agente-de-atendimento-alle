@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { Card } from "../components/Card.js";
 import { EditorPerfilNumero } from "../components/EditorPerfilNumero.js";
 import { ConexaoInstagram } from "./Instagram.js";
+import { ConfiguracaoEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
 import { Icone } from "../components/ui/Icone.js";
 import { toast } from "../components/ui/Toast.js";
@@ -62,6 +63,8 @@ export function Configuracoes() {
       <ImagensDoAgente />
 
       <ConexaoInstagram />
+
+      <ConfiguracaoEvo />
     </div>
   );
 }

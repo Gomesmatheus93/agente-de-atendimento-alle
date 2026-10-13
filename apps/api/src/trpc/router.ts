@@ -6,6 +6,7 @@ import { configuracoesRouter } from "./routers/configuracoes.js";
 import { conversasRouter } from "./routers/conversas.js";
 import { dashboardRouter } from "./routers/dashboard.js";
 import { duvidasRouter } from "./routers/duvidas.js";
+import { evoRouter } from "./routers/evo.js";
 import { funilRouter } from "./routers/funil.js";
 import { instagramRouter } from "./routers/instagram.js";
 import { relatoriosRouter } from "./routers/relatorios.js";
@@ -21,6 +22,7 @@ export const appRouter = router({
   conversas: conversasRouter,
   dashboard: dashboardRouter,
   duvidas: duvidasRouter,
+  evo: evoRouter,
   funil: funilRouter,
   instagram: instagramRouter,
   relatorios: relatoriosRouter,

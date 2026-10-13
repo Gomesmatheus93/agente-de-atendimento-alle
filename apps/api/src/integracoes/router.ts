@@ -5,6 +5,8 @@ import { z } from "zod";
 import { unidadeDaChaveIntegracao } from "../config/plataforma.js";
 import { criarCampanha } from "../servicos/campanhas.js";
 import { enviarMensagem, garantirNumeroDaUnidade, obterConversa, passarParaHumano } from "../servicos/conversas.js";
+import { cadastrarNoEvo, dadosDeCadastroSchema, extrairPedidoDeCadastro, situacaoParaIa } from "../evo/integracao.js";
+import { configEvo, ErroEvo, situacaoNoEvo } from "../evo/cliente.js";
 import { chaveBloqueada, registrarFalhaDeChave } from "../seguranca.js";
 import { getDb } from "../trpc/context.js";
 import { midiasAgente } from "@atendimento-academias/db";
@@ -80,8 +82,14 @@ export function criarRouterIntegracoes(): Router {
 
     try {
       await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, res.locals.unidadeId as number);
-      const conversa = await obterConversa(getDb(), entrada.data.telefone, entrada.data.numeroId);
-      res.status(200).json(conversa);
+      const unidadeId = res.locals.unidadeId as number;
+      // Situação do cliente no EVO (aluno, lead ou não cadastrado) junto da conversa: o bot já sabe com
+      // quem fala sem precisar de outra chamada.
+      const [conversa, evo] = await Promise.all([
+        obterConversa(getDb(), entrada.data.telefone, entrada.data.numeroId),
+        situacaoParaIa(getDb(), unidadeId, entrada.data.telefone),
+      ]);
+      res.status(200).json({ ...conversa, evo });
     } catch (erro) {
       if (erro instanceof TRPCError) {
         res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
@@ -108,7 +116,24 @@ export function criarRouterIntegracoes(): Router {
     try {
       const unidadeId = res.locals.unidadeId as number;
       await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, unidadeId);
-      const { imagem: nomeDaImagem, ...mensagem } = entrada.data;
+      const { imagem: nomeDaImagem, ...pedido } = entrada.data;
+      // [CADASTRAR_EVO]{...} na resposta do bot: sai do texto e vira o cadastro do cliente no EVO.
+      const { texto, dados: cadastro } = extrairPedidoDeCadastro(pedido.texto);
+      const mensagem = { ...pedido, texto };
+      let evo: Awaited<ReturnType<typeof cadastrarNoEvo>> | { erro: string } | null = null;
+      if (cadastro) {
+        try {
+          evo = await cadastrarNoEvo(getDb(), unidadeId, pedido.telefone, cadastro);
+          console.log(`[evo] ${pedido.telefone}: ${evo.criado ? "cadastrado como lead" : `já estava no EVO (${evo.situacao.situacao})`}`);
+        } catch (erro) {
+          evo = { erro: erro instanceof Error ? erro.message : String(erro) };
+          console.error(`[evo] falha ao cadastrar ${pedido.telefone}:`, erro);
+        }
+      }
+      if (!mensagem.texto && !nomeDaImagem) {
+        res.status(200).json({ enviada: false, evo });
+        return;
+      }
       let imagem: { midiaUrl: string; mimeType: string } | undefined;
       if (nomeDaImagem) {
         const [midia] = await getDb()
@@ -122,7 +147,7 @@ export function criarRouterIntegracoes(): Router {
         imagem = { midiaUrl: midia.midiaUrl, mimeType: midia.mimeType };
       }
       const resultado = await enviarMensagem(getDb(), { ...mensagem, imagem });
-      res.status(201).json(resultado);
+      res.status(201).json({ ...resultado, evo });
     } catch (erro) {
       if (erro instanceof TRPCError) {
         res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
@@ -130,6 +155,56 @@ export function criarRouterIntegracoes(): Router {
       }
       console.error("[integracoes] falha ao enviar mensagem:", erro);
       res.status(500).json({ error: "Falha inesperada ao enviar a mensagem" });
+    }
+  });
+
+  // EVO: situação do cliente (aluno, lead ou não cadastrado). Aceita CPF e e-mail para achar quem cadastrou
+  // outro telefone no EVO.
+  router.get("/evo/cliente", async (req, res) => {
+    const entrada = detalheConversaInputSchema
+      .extend({ cpf: z.string().trim().max(20).optional(), email: z.string().trim().max(150).optional() })
+      .safeParse({ telefone: req.query.telefone, numeroId: Number(req.query.numeroId), cpf: req.query.cpf, email: req.query.email });
+    if (!entrada.success) {
+      res.status(400).json({ error: "Informe telefone e numeroId (query string)", detalhes: entrada.error.flatten() });
+      return;
+    }
+    try {
+      const unidadeId = res.locals.unidadeId as number;
+      await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, unidadeId);
+      const config = await configEvo(getDb(), unidadeId);
+      if (!config) {
+        res.status(200).json({ situacao: "nao_configurado" });
+        return;
+      }
+      res.status(200).json(await situacaoNoEvo(config, unidadeId, entrada.data));
+    } catch (erro) {
+      if (erro instanceof TRPCError) {
+        res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
+        return;
+      }
+      res.status(502).json({ error: erro instanceof Error ? erro.message : "Falha ao consultar o EVO" });
+    }
+  });
+
+  // EVO: cadastra como lead quem ainda não está lá (se já for aluno ou lead, devolve o cadastro existente).
+  router.post("/evo/cadastrar", async (req, res) => {
+    const entrada = detalheConversaInputSchema.merge(dadosDeCadastroSchema).safeParse(req.body);
+    if (!entrada.success) {
+      res.status(400).json({ error: "Dados inválidos", detalhes: entrada.error.flatten() });
+      return;
+    }
+    try {
+      const unidadeId = res.locals.unidadeId as number;
+      await garantirNumeroDaUnidade(getDb(), entrada.data.numeroId, unidadeId);
+      const { telefone, numeroId: _numeroId, ...dados } = entrada.data;
+      const resultado = await cadastrarNoEvo(getDb(), unidadeId, telefone, dados);
+      res.status(resultado.criado ? 201 : 200).json(resultado);
+    } catch (erro) {
+      if (erro instanceof TRPCError) {
+        res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
+        return;
+      }
+      res.status(erro instanceof ErroEvo && erro.status === 412 ? 412 : 502).json({ error: erro instanceof Error ? erro.message : "Falha ao cadastrar no EVO" });
     }
   });
 
