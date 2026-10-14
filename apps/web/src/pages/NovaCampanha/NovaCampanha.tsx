@@ -84,6 +84,22 @@ function carregarRascunho(): Rascunho {
   return RASCUNHO_VAZIO;
 }
 
+// Lista de destinatários a partir da base de contatos: "Nome; telefone" por linha (o nome vira a coluna 1,
+// que personaliza a mensagem). Separadores dentro do nome quebrariam a linha.
+export function linhasDeContatos(contatos: Array<{ telefone: string; nome: string | null }>): string {
+  return contatos.map((c) => (c.nome?.trim() ? `${c.nome.replace(/[;,\t|]/g, " ").trim()}; ${c.telefone}` : c.telefone)).join("\n");
+}
+
+// "Criar campanha" a partir de um segmento: começa um rascunho novo já com os destinatários.
+export function iniciarCampanhaComContatos(contatos: Array<{ telefone: string; nome: string | null }>, nome: string): void {
+  try {
+    sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ ...RASCUNHO_VAZIO, nome, telefonesTexto: linhasDeContatos(contatos) }));
+  } catch {
+    // sem sessionStorage: a campanha abre vazia
+  }
+  navegar({ tela: "nova-campanha" });
+}
+
 export function NovaCampanha() {
   const [rascunho, setRascunho] = useState(carregarRascunho);
   const tituloRef = useRef<HTMLHeadingElement>(null);

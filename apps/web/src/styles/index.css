@@ -219,6 +219,37 @@ html[data-theme="dark"] {
   --shadow-button-hover: 0 8px 24px rgb(185 138 232 / 0.2);
 }
 
+/* Cores das etiquetas de contato (fundo e texto), nos dois temas. */
+:root {
+  --etq-roxo-bg: #f2eafb;
+  --etq-roxo-fg: #5b1f8f;
+  --etq-laranja-bg: #fff1e6;
+  --etq-laranja-fg: #a8440a;
+  --etq-verde-bg: #e6f5f0;
+  --etq-verde-fg: #076b56;
+  --etq-azul-bg: #e8f1fc;
+  --etq-azul-fg: #1554a0;
+  --etq-rosa-bg: #fcebf3;
+  --etq-rosa-fg: #a3245f;
+  --etq-cinza-bg: #eeecf2;
+  --etq-cinza-fg: #4f4760;
+}
+
+html[data-theme="dark"] {
+  --etq-roxo-bg: rgb(185 138 232 / 0.18);
+  --etq-roxo-fg: #d3b6f5;
+  --etq-laranja-bg: rgb(255 133 51 / 0.16);
+  --etq-laranja-fg: #ffb27a;
+  --etq-verde-bg: rgb(47 196 160 / 0.15);
+  --etq-verde-fg: #5fe0bd;
+  --etq-azul-bg: rgb(106 180 255 / 0.16);
+  --etq-azul-fg: #9ccbff;
+  --etq-rosa-bg: rgb(240 110 170 / 0.16);
+  --etq-rosa-fg: #f5a3c8;
+  --etq-cinza-bg: rgb(185 174 203 / 0.14);
+  --etq-cinza-fg: #cfc6dc;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

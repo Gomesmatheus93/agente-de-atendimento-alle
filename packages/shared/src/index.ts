@@ -11,3 +11,4 @@ export * from "./precos.js";
 export * from "./duvidas.js";
 export * from "./funil.js";
 export * from "./queues.js";
+export * from "./schemas/contatos.js";

@@ -3,6 +3,7 @@ import { authRouter } from "./routers/auth.js";
 import { calendarioRouter } from "./routers/calendario.js";
 import { campanhasRouter } from "./routers/campanhas.js";
 import { configuracoesRouter } from "./routers/configuracoes.js";
+import { contatosRouter } from "./routers/contatos.js";
 import { conversasRouter } from "./routers/conversas.js";
 import { dashboardRouter } from "./routers/dashboard.js";
 import { descadastrosRouter } from "./routers/descadastros.js";
@@ -21,6 +22,7 @@ export const appRouter = router({
   calendario: calendarioRouter,
   campanhas: campanhasRouter,
   configuracoes: configuracoesRouter,
+  contatos: contatosRouter,
   conversas: conversasRouter,
   dashboard: dashboardRouter,
   descadastros: descadastrosRouter,

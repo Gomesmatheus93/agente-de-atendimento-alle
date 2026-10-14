@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   campanhasDisparo,
   contatos,
+  contatosUnidade,
   conversasConfig,
   disparoDestinatarios,
   mensagensSaida,
@@ -175,6 +176,18 @@ async function registrarContato(db: Db, telefone: string, nomePerfil: string): P
     .insert(contatos)
     .values({ telefone, nomePerfil })
     .onConflictDoUpdate({ target: contatos.telefone,  set: { nomePerfil } });
+}
+
+// Quem escreve entra na base de contatos da unidade (para segmentos e campanhas). O nome do perfil só
+// preenche o contato que ainda não tem nome: o da planilha da academia vale mais.
+async function registrarNaBase(db: Db, unidadeId: number, telefone: string, nomePerfil: string | undefined): Promise<void> {
+  await db
+    .insert(contatosUnidade)
+    .values({ unidadeId, telefone, nome: nomePerfil ?? null, origem: "conversa" })
+    .onConflictDoUpdate({
+      target: [contatosUnidade.unidadeId, contatosUnidade.telefone],
+      set: { nome: sql`coalesce(${contatosUnidade.nome}, excluded.nome)` },
+    });
 }
 
 // A IA liga sozinha quando um cliente nosso escreve, para o atendimento seguir sem esperar a equipe. Ela
@@ -672,6 +685,9 @@ export function criarWebhookWhatsapp(): Router {
         const { telefone } = registro;
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
+        await registrarNaBase(db, mensagem.unidadeId, telefone, nomePerfil).catch((erro) =>
+          console.error(`[webhook-whatsapp] não foi possível pôr ${telefone} na base de contatos:`, erro),
+        );
         // "sair"/"parar" (ou o botão "Parar promoções"): sai da lista de campanhas e recebe a confirmação, sem
         // o bot responder por cima. "voltar" desfaz.
         if (conteudo.tipo === "texto" && (await tratarPedidoDeDescadastro(db, mensagem.unidadeId, telefone, mensagem.numeroId, conteudo.texto))) {

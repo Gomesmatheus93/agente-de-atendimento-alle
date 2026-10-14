@@ -10,6 +10,7 @@ import {
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CHAVE_BUSCA_CONVERSAS } from "../components/BarraSuperior.js";
+import { EtiquetasDaConversa } from "../components/Etiquetas.js";
 import { SeloDescadastro, SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
@@ -507,6 +508,9 @@ function ConversaAberta({
             {conversa.nome ? `${formatarTelefone(conversa.telefone)} · ` : ""}
             {formatarNumero(conversa.totalRecebidas)} {conversa.totalRecebidas === 1 ? "mensagem recebida" : "mensagens recebidas"}
           </p>
+          <div className="mt-1.5">
+            <EtiquetasDaConversa telefone={telefone} numeroId={numeroId} />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SeloEvo telefone={telefone} numeroId={numeroId} nome={conversa.nome} />

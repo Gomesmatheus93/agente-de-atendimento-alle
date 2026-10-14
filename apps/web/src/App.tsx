@@ -19,6 +19,7 @@ import { NovoTemplate } from "./pages/NovoTemplate.js";
 import { Templates } from "./pages/Templates.js";
 import { VisaoGeral } from "./pages/VisaoGeral.js";
 import { Saude } from "./pages/Saude.js";
+import { Contatos } from "./pages/Contatos.js";
 
 export function App() {
   const utils = trpc.useUtils();
@@ -204,6 +205,12 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
           descricao="Desempenho das campanhas: quantos clientes responderam e quanto cada resposta custou."
         >
           <Relatorios />
+        </Layout>
+      );
+    case "contatos":
+      return (
+        <Layout telaAtiva="contatos" titulo="Contatos" descricao="Alunos, leads e ex-alunos da unidade, com etiquetas e segmentos para as campanhas.">
+          <Contatos />
         </Layout>
       );
     case "saude":

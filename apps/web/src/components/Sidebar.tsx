@@ -25,6 +25,7 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
     itens: [
       { tela: "visao-geral", label: "Visão geral", href: hrefDe({ tela: "visao-geral" }), icone: "painel" },
       { tela: "conversas", label: "Conversas", href: hrefDe({ tela: "conversas", telefone: null, numeroId: null }), icone: "mensagem" },
+      { tela: "contatos", label: "Contatos", href: hrefDe({ tela: "contatos" }), icone: "agenda" },
       { tela: "funil", label: "Funil de clientes", href: hrefDe({ tela: "funil" }), icone: "funil" },
       { tela: "campanhas", label: "Campanhas", href: hrefDe({ tela: "campanhas", campanhaId: null }), icone: "kanban" },
       { tela: "calendario", label: "Calendário", href: hrefDe({ tela: "calendario" }), icone: "calendario" },
