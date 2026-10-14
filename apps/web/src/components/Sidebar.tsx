@@ -51,8 +51,8 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
 function Marca() {
   return (
     <a href={hrefDe({ tela: "visao-geral" })} aria-label="Allp Chat — início" className="flex items-center gap-2.5 rounded-lg px-1">
-      <img src="/allp-simbolo.png" alt="" aria-hidden="true" className="h-6 w-auto shrink-0" />
-      <span className="font-heading text-base font-bold tracking-tight text-sidebar-ink">
+      <img src="/allp-simbolo.png" alt="" aria-hidden="true" className="h-7 w-auto shrink-0" />
+      <span className="font-heading text-lg font-bold tracking-tight text-sidebar-ink">
         Allp <span className="text-brand-2">Chat</span>
       </span>
     </a>
@@ -79,10 +79,10 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   })).filter((grupo) => grupo.itens.length > 0);
 
   return (
-    <nav aria-label="Principal" className="flex flex-col gap-5">
+    <nav aria-label="Principal" className="flex flex-col gap-6">
       {grupos.map((grupo) => (
         <div key={grupo.titulo} className="flex flex-col gap-0.5">
-          <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-sidebar-ink-2/60">{grupo.titulo}</p>
+          <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-ink-2/70">{grupo.titulo}</p>
           {grupo.itens.map((item) => {
             const ativo = item.tela === telaAtiva;
             return (
@@ -91,19 +91,19 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
                 href={item.href}
                 onClick={onNavegar}
                 aria-current={ativo ? "page" : undefined}
-                className={`flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors ${
-                  ativo
-                    ? "bg-white/10 font-medium text-sidebar-ink"
-                    : "text-sidebar-ink-2 hover:bg-white/[0.05] hover:text-sidebar-ink"
+                className={`relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
+                  ativo ? "font-semibold text-sidebar-ink" : "text-sidebar-ink-2 hover:bg-surface-2 hover:text-sidebar-ink"
                 }`}
               >
-                <Icone nome={item.icone} tamanho={16} className={ativo ? "text-brand-2" : ""} />
+                {/* Marca do item ativo colada na borda do menu, como no modelo. */}
+                {ativo && <span aria-hidden="true" className="absolute -left-5 top-1/2 h-7 w-1.5 -translate-y-1/2 rounded-r-full bg-accent" />}
+                <Icone nome={item.icone} tamanho={18} className={ativo ? "text-accent-text" : ""} />
                 <span className="truncate">{item.label}</span>
                 {item.tela === "conversas" && precisamDeHumano > 0 && (
                   <span
                     aria-label={`${precisamDeHumano} cliente${precisamDeHumano > 1 ? "s" : ""} precisando de atendimento humano`}
                     title="Precisando de atendimento humano"
-                    className="ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center gap-0.5 rounded-full bg-amber-400 px-1 text-[10px] font-bold text-amber-950"
+                    className="ml-auto inline-flex h-5 min-w-5 items-center justify-center gap-0.5 rounded-md bg-amber-400 px-1 text-[10px] font-bold text-amber-950"
                   >
                     🙋{precisamDeHumano}
                   </span>
@@ -111,7 +111,7 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
                 {item.tela === "conversas" && naoLidas > 0 && (
                   <span
                     aria-label={`${naoLidas} conversa${naoLidas > 1 ? "s" : ""} com mensagem não lida`}
-                    className={`${precisamDeHumano > 0 ? "ml-1" : "ml-auto"} inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-2 px-1 text-[10px] font-bold text-brand-2-contrast`}
+                    className={`${precisamDeHumano > 0 ? "ml-1" : "ml-auto"} inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-accent px-1.5 text-[10px] font-bold text-accent-contrast`}
                   >
                     {naoLidas > 99 ? "99+" : naoLidas}
                   </span>
@@ -125,25 +125,29 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   );
 }
 
-function BotaoNovaCampanha({ ativa, onNavegar }: { ativa: boolean; onNavegar?: () => void }) {
+// Card de destaque no pé do menu (o "baixe o app" do modelo): o atalho mais usado da plataforma.
+function CartaoNovaCampanha({ onNavegar }: { onNavegar?: () => void }) {
   return (
-    <a
-      href={hrefDe({ tela: "nova-campanha" })}
-      onClick={onNavegar}
-      aria-current={ativa ? "page" : undefined}
-      className={`flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-[13px] font-semibold transition-colors ${
-        ativa
-          ? "border-brand-2/30 bg-brand-2/15 text-brand-2"
-          : "border-white/10 bg-white/[0.06] text-sidebar-ink hover:bg-white/10"
-      }`}
-    >
-      <Icone nome="mais" tamanho={15} />
-      Nova campanha
-    </a>
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#25083d] via-[#3a0c61] to-[#5b1593] p-4 text-white">
+      <span aria-hidden="true" className="absolute -right-8 -top-10 h-32 w-32 rounded-full border-[14px] border-white/5" />
+      <span aria-hidden="true" className="absolute -bottom-12 -left-6 h-28 w-28 rounded-full border-[10px] border-brand-2/20" />
+      <span aria-hidden="true" className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+        <Icone nome="enviar" tamanho={15} />
+      </span>
+      <p className="relative mt-3 font-heading text-base font-bold leading-tight">Nova campanha</p>
+      <p className="relative mt-1 text-xs text-white/70">Dispare um template para os seus clientes em minutos.</p>
+      <a
+        href={hrefDe({ tela: "nova-campanha" })}
+        onClick={onNavegar}
+        className="relative mt-3 flex min-h-9 items-center justify-center rounded-full bg-brand-2 text-sm font-semibold text-white transition-colors hover:bg-[#e65c00]"
+      >
+        Criar campanha
+      </a>
+    </div>
   );
 }
 
-function iniciais(nome: string): string {
+export function iniciais(nome: string): string {
   return nome
     .split(/\s+/)
     .slice(0, 2)
@@ -165,21 +169,21 @@ function SeletorDeUnidade() {
   if (!usuario) return null;
   if (!ehSuperadmin) {
     return usuario.unidadeNome ? (
-      <p className="flex items-center gap-2 truncate rounded-lg bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-sidebar-ink">
-        <Icone nome="predio" tamanho={14} className="shrink-0 text-sidebar-ink-2" />
+      <p className="flex items-center gap-2 truncate rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] font-medium text-sidebar-ink">
+        <Icone nome="predio" tamanho={15} className="shrink-0 text-accent-text" />
         <span className="truncate">{usuario.unidadeNome}</span>
       </p>
     ) : null;
   }
 
   return (
-    <label className="flex flex-col gap-1 text-[10px] font-medium uppercase tracking-wider text-sidebar-ink-2/60">
+    <label className="flex flex-col gap-1.5 px-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-ink-2/70">
       Unidade
       <select
         value={usuario.unidadeId ?? ""}
         onChange={(evento) => entrar.mutate({ id: evento.target.value ? Number(evento.target.value) : null })}
         disabled={entrar.isPending}
-        className="rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-2 text-[12px] font-medium normal-case tracking-normal text-sidebar-ink"
+        className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] font-medium normal-case tracking-normal text-sidebar-ink"
       >
         <option value="">Nenhuma (só Unidades)</option>
         {(unidades.data ?? []).map((unidade) => (
@@ -193,47 +197,28 @@ function SeletorDeUnidade() {
   );
 }
 
-// Rodapé: quem está logado, tema e saída, em uma linha só — o bloco antigo ocupava três.
-function Rodape() {
+// Só no menu do celular: lá não há barra superior, então quem está logado, o tema e a saída ficam aqui.
+function RodapeCelular() {
   const utils = trpc.useUtils();
   const { tema, alternar } = useTema();
-  const estado = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 });
+  const usuario = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario;
   const sair = trpc.auth.sair.useMutation({ onSettled: () => void utils.invalidate() });
-
-  const usuario = estado.data?.usuario;
   if (!usuario) return null;
 
   return (
     <div className="flex items-center gap-2 border-t border-sidebar-linha pt-3">
-      <span
-        aria-hidden="true"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-semibold text-sidebar-ink"
-      >
+      <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent-text">
         {iniciais(usuario.nome)}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12px] font-semibold text-sidebar-ink">{usuario.nome}</span>
-        <span className="mt-0.5 block text-[10px] text-sidebar-ink-2">{ROTULO_PAPEL[usuario.papel]}</span>
+        <span className="block truncate text-[13px] font-semibold text-sidebar-ink">{usuario.nome}</span>
+        <span className="block text-[11px] text-sidebar-ink-2">{ROTULO_PAPEL[usuario.papel]}</span>
       </span>
-
-      <button
-        type="button"
-        onClick={alternar}
-        aria-label={tema === "claro" ? "Usar tema escuro" : "Usar tema claro"}
-        title={tema === "claro" ? "Usar tema escuro" : "Usar tema claro"}
-        className="rounded-lg p-1.5 text-sidebar-ink-2 transition-colors hover:bg-white/10 hover:text-sidebar-ink"
-      >
-        <Icone nome={tema === "claro" ? "lua" : "sol"} tamanho={15} />
+      <button type="button" onClick={alternar} aria-label={tema === "claro" ? "Usar tema escuro" : "Usar tema claro"} className="rounded-full p-2 text-sidebar-ink-2 hover:bg-surface-2">
+        <Icone nome={tema === "claro" ? "lua" : "sol"} tamanho={16} />
       </button>
-      <button
-        type="button"
-        onClick={() => sair.mutate()}
-        disabled={sair.isPending}
-        aria-label="Sair"
-        title="Sair"
-        className="rounded-lg p-1.5 text-sidebar-ink-2 transition-colors hover:bg-white/10 hover:text-sidebar-ink disabled:opacity-50"
-      >
-        <Icone nome="sair" tamanho={15} />
+      <button type="button" onClick={() => sair.mutate()} disabled={sair.isPending} aria-label="Sair" className="rounded-full p-2 text-sidebar-ink-2 hover:bg-surface-2 disabled:opacity-50">
+        <Icone nome="sair" tamanho={16} />
       </button>
     </div>
   );
@@ -290,14 +275,14 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
           onClick={alternarColapso}
           aria-label="Mostrar menu"
           title="Mostrar menu"
-          className="sticky top-5 z-30 ml-3 hidden h-9 w-9 shrink-0 items-center justify-center self-start rounded-lg border border-card-border bg-surface text-ink-2 transition-colors hover:border-baseline hover:text-ink md:flex"
+          className="sticky top-4 z-30 hidden h-11 w-11 shrink-0 items-center justify-center self-start rounded-2xl bg-surface text-ink-2 shadow-card transition-colors hover:text-accent-text md:flex"
         >
           <Icone nome="menu" tamanho={16} />
         </button>
       ) : (
         // Tudo cabe sem rolar; a rolagem existe só como rede de segurança em telas muito baixas,
         // e sem barra visível, que é o que mais sujava a lateral.
-        <aside className="sticky top-0 z-30 hidden h-screen w-60 shrink-0 flex-col gap-5 bg-sidebar px-3 py-5 md:flex">
+        <aside className="sticky top-4 z-30 hidden h-[calc(100vh-2rem)] w-64 shrink-0 flex-col gap-6 rounded-[28px] bg-sidebar px-5 py-6 shadow-card md:flex">
           <div className="flex items-center justify-between gap-2">
             <Marca />
             <button
@@ -305,17 +290,16 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
               onClick={alternarColapso}
               aria-label="Ocultar menu"
               title="Ocultar menu"
-              className="rounded-lg p-1.5 text-sidebar-ink-2 transition-colors hover:bg-white/10 hover:text-sidebar-ink"
+              className="rounded-full p-1.5 text-sidebar-ink-2 transition-colors hover:bg-surface-2 hover:text-sidebar-ink"
             >
               <Icone nome="recolher" tamanho={15} />
             </button>
           </div>
           <SeletorDeUnidade />
-          <BotaoNovaCampanha ativa={telaAtiva === "nova-campanha"} />
-          <div className="sem-barra min-h-0 flex-1 overflow-y-auto">
+          <div className="sem-barra -mx-5 min-h-0 flex-1 overflow-y-auto px-5">
             <Menu telaAtiva={telaAtiva} />
           </div>
-          <Rodape />
+          <CartaoNovaCampanha />
         </aside>
       )}
 
@@ -327,7 +311,7 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
             aria-label={menuAberto ? "Fechar menu" : "Abrir menu"}
             aria-expanded={menuAberto}
             onClick={() => setMenuAberto((aberto) => !aberto)}
-            className="rounded-lg p-2 text-sidebar-ink-2 hover:bg-white/10 hover:text-sidebar-ink"
+            className="rounded-full p-2 text-sidebar-ink-2 hover:bg-surface-2 hover:text-sidebar-ink"
           >
             <Icone nome={menuAberto ? "x" : "menu"} tamanho={22} />
           </button>
@@ -344,11 +328,11 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
           />
           <div className="sem-barra absolute bottom-0 left-0 top-0 flex w-[min(19rem,88vw)] flex-col gap-5 overflow-y-auto border-r border-sidebar-linha bg-sidebar px-3 py-4 shadow-lg">
             <SeletorDeUnidade />
-            <BotaoNovaCampanha ativa={telaAtiva === "nova-campanha"} onNavegar={() => setMenuAberto(false)} />
-            <div className="min-h-0 flex-1">
+            <div className="-mx-3 min-h-0 flex-1 px-5">
               <Menu telaAtiva={telaAtiva} onNavegar={() => setMenuAberto(false)} />
             </div>
-            <Rodape />
+            <CartaoNovaCampanha onNavegar={() => setMenuAberto(false)} />
+            <RodapeCelular />
           </div>
         </div>
       )}

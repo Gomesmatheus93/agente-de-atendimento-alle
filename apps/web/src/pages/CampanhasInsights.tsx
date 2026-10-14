@@ -42,14 +42,14 @@ export function AbasCampanhas({ ativa }: { ativa: "quadro" | "insights" }) {
     { id: "insights", rotulo: "Insights", href: hrefDe({ tela: "campanhas-insights" }), icone: "grafico" },
   ] as const;
   return (
-    <nav aria-label="Visões de campanhas" className="inline-flex rounded-xl bg-slate-200/60 p-1">
+    <nav aria-label="Visões de campanhas" className="inline-flex self-start rounded-full bg-surface p-1 shadow-card">
       {abas.map((aba) => (
         <a
           key={aba.id}
           href={aba.href}
           aria-current={aba.id === ativa ? "page" : undefined}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors ${
-            aba.id === ativa ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink"
+          className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            aba.id === ativa ? "bg-accent text-accent-contrast" : "text-ink-2 hover:text-ink"
           }`}
         >
           <Icone nome={aba.icone} tamanho={14} />

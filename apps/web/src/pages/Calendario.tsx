@@ -180,7 +180,7 @@ export function Calendario() {
       ) : (
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
           {/* div em vez de Card: o p-5 do Card venceria o p-0 (mesma camada do Tailwind), e a grade precisa encostar nas bordas. */}
-          <div className="overflow-hidden rounded-xl border border-card-border bg-surface">
+          <div className="overflow-hidden rounded-3xl bg-surface shadow-card">
             {query.isPending ? (
               <Esqueleto className="h-[36rem] rounded-none" />
             ) : (

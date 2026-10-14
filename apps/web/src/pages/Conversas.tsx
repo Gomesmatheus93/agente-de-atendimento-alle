@@ -1,6 +1,7 @@
 import { JANELA_RESPOSTA_MS, TAMANHO_MAX_ASSINATURA, TAMANHO_MAX_RESPOSTA } from "@atendimento-academias/shared";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { CHAVE_BUSCA_CONVERSAS } from "../components/BarraSuperior.js";
 import { SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
@@ -52,10 +53,29 @@ function useAgora(intervaloMs: number): number {
   return agora;
 }
 
+function lerBuscaDaBarra(): string {
+  try {
+    const texto = sessionStorage.getItem(CHAVE_BUSCA_CONVERSAS) ?? "";
+    sessionStorage.removeItem(CHAVE_BUSCA_CONVERSAS);
+    return texto;
+  } catch {
+    return "";
+  }
+}
+
 export function Conversas({ telefone, numeroId }: { telefone: string | null; numeroId: number | null }) {
   // Rascunhos por contato: trocar de conversa no meio de uma resposta não apaga o que foi digitado.
   const rascunhos = useRef<Record<string, string>>({});
-  const [busca, setBusca] = useState("");
+  // A busca da barra superior abre esta tela já filtrada.
+  const [busca, setBusca] = useState(lerBuscaDaBarra);
+  useEffect(() => {
+    const aplicar = () => {
+      const texto = lerBuscaDaBarra();
+      if (texto) setBusca(texto);
+    };
+    window.addEventListener(CHAVE_BUSCA_CONVERSAS, aplicar);
+    return () => window.removeEventListener(CHAVE_BUSCA_CONVERSAS, aplicar);
+  }, []);
   const [apenasNaoLidas, setApenasNaoLidas] = useState(false);
   const buscaAtrasada = useValorAtrasado(busca.trim(), ATRASO_BUSCA_MS);
 
@@ -80,7 +100,7 @@ export function Conversas({ telefone, numeroId }: { telefone: string | null; num
   }
 
   return (
-    <div className="grid h-[calc(100vh-15rem)] min-h-[32rem] overflow-hidden rounded-2xl border border-card-border bg-surface lg:grid-cols-[23rem_minmax(0,1fr)]">
+    <div className="grid h-[calc(100vh-15rem)] min-h-[32rem] overflow-hidden rounded-3xl bg-surface shadow-card lg:grid-cols-[23rem_minmax(0,1fr)]">
       <section
         aria-label="Lista de conversas"
         className={`min-h-0 flex-col border-card-border lg:border-r ${telefone ? "hidden lg:flex" : "flex"}`}

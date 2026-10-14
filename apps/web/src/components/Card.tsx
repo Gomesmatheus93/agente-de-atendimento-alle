@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from "react";
 
-// Só borda, sem sombra: ela já marca o limite do card. Sombra (--shadow-card/--shadow-pop) fica reservada
-// para o que flutua por cima do conteúdo — menu, tooltip, toast — onde ela sinaliza sobreposição de verdade.
+// Ilha branca de cantos grandes sobre o fundo lavanda: a separação vem do contraste com o fundo, então não
+// precisa de borda. A sombra é só um respiro; a de "flutuar" (--shadow-pop) fica para menus, toasts e avisos.
 export function Card({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={`rounded-xl border border-card-border bg-surface p-4 ${className}`} {...props} />;
+  return <div className={`rounded-3xl bg-surface p-5 shadow-card ${className}`} {...props} />;
 }

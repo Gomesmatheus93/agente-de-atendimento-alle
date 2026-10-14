@@ -1,5 +1,6 @@
 import { Layout } from "./components/Layout.js";
-import { useRota } from "./lib/route.js";
+import { Icone } from "./components/ui/Icone.js";
+import { hrefDe, useRota } from "./lib/route.js";
 import { trpc } from "./lib/trpc.js";
 import { Login } from "./pages/Login.js";
 import { Campanhas } from "./pages/Campanhas.js";
@@ -69,7 +70,27 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
   switch (rota.tela) {
     case "visao-geral":
       return (
-        <Layout telaAtiva="visao-geral" titulo="Visão geral" descricao="Acompanhe o desempenho dos seus disparos de WhatsApp.">
+        <Layout
+          telaAtiva="visao-geral"
+          titulo="Visão geral"
+          descricao="Acompanhe disparos, conversas e matrículas da unidade num só lugar."
+          acoes={
+            <>
+              <a
+                href={hrefDe({ tela: "nova-campanha" })}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-gradient-to-br from-[#5b1593] to-[#470e75] px-5 text-sm font-semibold text-white shadow-card transition-opacity hover:opacity-90"
+              >
+                <Icone nome="mais" tamanho={16} /> Nova campanha
+              </a>
+              <a
+                href={hrefDe({ tela: "conversas", telefone: null, numeroId: null })}
+                className="inline-flex min-h-11 items-center rounded-full border border-accent/40 bg-surface px-5 text-sm font-semibold text-accent-text transition-colors hover:bg-accent-soft"
+              >
+                Ver conversas
+              </a>
+            </>
+          }
+        >
           <VisaoGeral />
         </Layout>
       );

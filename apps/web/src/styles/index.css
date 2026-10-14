@@ -1,15 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  --color-app-bg: #f7f7f8;
+  /* Fundo cinza-lavanda e "ilhas" brancas de cantos grandes (menu, barra superior, cards). */
+  --color-app-bg: #f1eff5;
   --color-surface: #ffffff;
-  --color-card-border: #e7e5e9;
+  /* Fundo sutil dentro de um card (trilhos de gráfico, linhas de lista ao passar o mouse). */
+  --color-surface-2: #f6f4f9;
+  --color-card-border: #e9e5ef;
 
-  /* A barra lateral é escura nos dois temas: vira moldura, e os dados ficam sendo a parte clara. */
-  --color-sidebar: #25083d;
-  --color-sidebar-ink: #f8f4fc;
-  --color-sidebar-ink-2: #bfaed6;
-  --color-sidebar-linha: #3d1a5c;
+  /* Menu lateral claro, como uma ilha à parte; o item ativo leva o roxo da marca. */
+  --color-sidebar: #ffffff;
+  --color-sidebar-ink: #21172f;
+  --color-sidebar-ink-2: #6f667c;
+  --color-sidebar-linha: #ece8f2;
+
+  /* Gráficos (validados com validate_palette.js contra a superfície do tema): roxo e laranja da marca em
+     tons que passam nos testes de daltonismo e contraste; "não fechou" vai em textura cinza. */
+  --color-graf-1: #6a24a8;
+  --color-graf-2: #ef6a10;
+  --color-graf-trilho: #ece7f3;
 
   /* Cores da Allp Fit, do manual de marca publicado no site (allpfit.com.br): roxo #470e75, laranja
      #ff6600 e o roxo quase preto #25083d, que aqui é a barra lateral. */
@@ -48,10 +57,19 @@
   --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-heading: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
 
-  --shadow-card: 0 1px 2px rgb(31 20 38 / 0.06);
+  --shadow-card: 0 1px 2px rgb(31 20 38 / 0.04), 0 4px 16px rgb(31 20 38 / 0.04);
   --shadow-pop: 0 8px 24px rgb(31 20 38 / 0.1);
   --shadow-button: none;
   --shadow-button-hover: none;
+}
+
+/* Cores de gráfico usadas por variável (SVG e gradientes em style=): o Tailwind só emite as variáveis do
+   @theme que aparecem em alguma classe, então estas ficam declaradas também aqui. */
+:root {
+  --color-graf-1: #6a24a8;
+  --color-graf-2: #ef6a10;
+  --color-graf-trilho: #ece7f3;
+  --color-surface-2: #f6f4f9;
 }
 
 /* Em @layer base, senão estas regras (sem camada) vencem as utilidades do Tailwind, como outline-none. */
@@ -140,12 +158,17 @@ html[data-theme="dark"] {
 
   --color-app-bg: #100a1c;
   --color-surface: #1a1229;
+  --color-surface-2: #221836;
   --color-card-border: #2e2440;
 
-  --color-sidebar: #17062a;
+  --color-sidebar: #1a1229;
   --color-sidebar-ink: #ede8f5;
   --color-sidebar-ink-2: #a898c2;
-  --color-sidebar-linha: #2c1445;
+  --color-sidebar-linha: #2c2140;
+
+  --color-graf-1: #a074dc;
+  --color-graf-2: #d8631a;
+  --color-graf-trilho: #2b2140;
 
   /* No escuro o roxo precisa clarear para continuar legível sobre o fundo. */
   --color-accent: #b98ae8;
