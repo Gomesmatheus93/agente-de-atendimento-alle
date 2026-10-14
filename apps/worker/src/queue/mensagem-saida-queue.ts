@@ -50,6 +50,15 @@ export async function enviarMensagem(db: Db, providers: FabricaDeProviders, mens
         console.warn(`[mensagem-saida] imagem da mensagem ${mensagem.id} não foi (${imagemFalhou}); enviando só o texto`);
         resultado = await provider.enviarTexto({ telefone: mensagem.telefone, texto: mensagem.texto });
       }
+    } else if (mensagem.tipo === "video" || mensagem.tipo === "documento") {
+      if (!mensagem.midiaUrl) throw new Error("Anexo sem arquivo gravado.");
+      resultado = await provider.enviarArquivo({
+        telefone: mensagem.telefone,
+        tipo: mensagem.tipo,
+        midiaUrl: mensagem.midiaUrl,
+        legenda: mensagem.texto || undefined,
+        nome: mensagem.midiaNome ?? undefined,
+      });
     } else {
       resultado = await provider.enviarTexto({ telefone: mensagem.telefone, texto: mensagem.texto });
     }

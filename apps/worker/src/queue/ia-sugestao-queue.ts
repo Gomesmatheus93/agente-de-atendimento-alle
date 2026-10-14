@@ -146,6 +146,8 @@ function textoParaIa(tipo: string, texto: string): string {
   if (tipo === "audio") return "[cliente enviou um áudio]";
   if (tipo === "figurinha") return "[cliente enviou uma figurinha]";
   if (tipo === "imagem") return `[imagem anexada]${texto ? ` ${texto}` : ""}`;
+  if (tipo === "video") return `[vídeo anexado]${texto ? ` ${texto}` : ""}`;
+  if (tipo === "documento") return `[documento anexado]${texto ? ` ${texto}` : ""}`;
   return texto;
 }
 

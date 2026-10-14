@@ -1,4 +1,12 @@
-import { JANELA_RESPOSTA_MS, TAMANHO_MAX_ASSINATURA, TAMANHO_MAX_RESPOSTA } from "@atendimento-academias/shared";
+import {
+  JANELA_RESPOSTA_MS,
+  MAX_ANEXO_BYTES,
+  MAX_IMAGEM_BYTES,
+  MIME_DO_ANEXO,
+  TAMANHO_MAX_ASSINATURA,
+  TAMANHO_MAX_LEGENDA,
+  TAMANHO_MAX_RESPOSTA,
+} from "@atendimento-academias/shared";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CHAVE_BUSCA_CONVERSAS } from "../components/BarraSuperior.js";
@@ -669,6 +677,32 @@ function Balao({
             )}
             {mensagem.texto && <p className="whitespace-pre-wrap break-words text-ink">{comNegrito(mensagem.texto)}</p>}
           </div>
+        ) : mensagem.tipo === "video" ? (
+          <div className="flex flex-col gap-2">
+            {mensagem.midiaUrl ? (
+              <video controls preload="metadata" src={mensagem.midiaUrl} className="max-h-72 w-64 max-w-full rounded-lg bg-black" />
+            ) : (
+              <p className="text-sm text-ink-3">Vídeo não guardado (grande demais ou indisponível)</p>
+            )}
+            {mensagem.texto && <p className="whitespace-pre-wrap break-words text-ink">{comNegrito(mensagem.texto)}</p>}
+          </div>
+        ) : mensagem.tipo === "documento" ? (
+          <div className="flex flex-col gap-2">
+            {mensagem.midiaUrl ? (
+              <a
+                href={`${mensagem.midiaUrl}${mensagem.midiaNome ? `?nome=${encodeURIComponent(mensagem.midiaNome)}` : ""}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-64 max-w-full items-center gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5 ring-1 ring-inset ring-card-border hover:ring-accent/40"
+              >
+                <Icone nome="documento" tamanho={20} />
+                <span className="min-w-0 flex-1 truncate font-medium text-ink">{mensagem.midiaNome ?? "Documento"}</span>
+              </a>
+            ) : (
+              <p className="text-sm text-ink-3">{mensagem.midiaNome ?? "Documento"} — arquivo não guardado (grande demais ou indisponível)</p>
+            )}
+            {mensagem.texto && <p className="whitespace-pre-wrap break-words text-ink">{comNegrito(mensagem.texto)}</p>}
+          </div>
         ) : figurinha ? (
           mensagem.midiaUrl ? (
             <img src={mensagem.midiaUrl} alt="Figurinha enviada pelo cliente" className="h-32 w-32 object-contain" />
@@ -919,6 +953,44 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
     onError: (erro) => toast.erro(mensagemDeErro(erro)),
   });
 
+  // Anexo escolhido no clipe: o texto do campo vira a legenda, e o Enviar manda os dois juntos.
+  const [anexo, setAnexo] = useState<File | null>(null);
+  const seletorRef = useRef<HTMLInputElement>(null);
+  const enviarAnexo = trpc.conversas.enviarAnexo.useMutation({
+    onSuccess: () => {
+      setAnexo(null);
+      setTexto("");
+      setSugestaoId(null);
+      onRascunho("");
+      onEnviada();
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+
+  function escolherAnexo(arquivo: File | undefined) {
+    if (!arquivo) return;
+    if (!(arquivo.type in MIME_DO_ANEXO)) {
+      toast.erro("Formato não aceito pelo WhatsApp. Use JPG, PNG, MP4, PDF, Word, Excel ou TXT.");
+      return;
+    }
+    const limite = MIME_DO_ANEXO[arquivo.type] === "imagem" ? MAX_IMAGEM_BYTES : MAX_ANEXO_BYTES;
+    if (arquivo.size > limite) {
+      toast.erro(`O arquivo passa de ${formatarNumero(limite / 1024 / 1024)} MB, o máximo para esse tipo.`);
+      return;
+    }
+    setAnexo(arquivo);
+    campoRef.current?.focus();
+  }
+
+  async function mandarAnexo(arquivo: File) {
+    try {
+      const arquivoBase64 = await blobParaBase64(arquivo);
+      enviarAnexo.mutate({ telefone, numeroId, arquivoBase64, mimeType: arquivo.type, nome: arquivo.name, legenda: texto.trim() });
+    } catch {
+      toast.erro("Não foi possível preparar o arquivo para envio.");
+    }
+  }
+
   function pararStream() {
     streamRef.current?.getTracks().forEach((faixa) => faixa.stop());
     streamRef.current = null;
@@ -1004,11 +1076,16 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
   }
 
   // A assinatura ("*Nome*" + quebra de linha) ocupa parte do limite de caracteres do WhatsApp.
-  const maximo = TAMANHO_MAX_RESPOSTA - (assinatura ? assinatura.length + 3 : 0);
-  const podeEnviar = Boolean(assinatura) && texto.trim() !== "" && texto.length <= maximo && !enviar.isPending;
+  // Com anexo, o texto é legenda, e a legenda tem um limite menor.
+  const maximo = (anexo ? TAMANHO_MAX_LEGENDA : TAMANHO_MAX_RESPOSTA) - (assinatura ? assinatura.length + 3 : 0);
+  const podeEnviar = anexo
+    ? Boolean(assinatura) && texto.length <= maximo && !enviarAnexo.isPending
+    : Boolean(assinatura) && texto.trim() !== "" && texto.length <= maximo && !enviar.isPending;
 
   function enviarAgora() {
-    if (podeEnviar) enviar.mutate({ telefone, numeroId, texto, sugestaoId: sugestaoId ?? undefined });
+    if (!podeEnviar) return;
+    if (anexo) void mandarAnexo(anexo);
+    else enviar.mutate({ telefone, numeroId, texto, sugestaoId: sugestaoId ?? undefined });
   }
 
   function aoTeclar(evento: KeyboardEvent<HTMLTextAreaElement>) {
@@ -1046,41 +1123,80 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
             </Button>
           </div>
         ) : (
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={campoRef}
-              value={texto}
-              onChange={(evento) => {
-                setTexto(evento.target.value);
-                onRascunho(evento.target.value);
-                // Apagou tudo: o que vier a seguir já não é a sugestão.
-                if (evento.target.value.trim() === "") setSugestaoId(null);
-              }}
-              onKeyDown={aoTeclar}
-              rows={Math.min(6, Math.max(1, texto.split("\n").length))}
-              maxLength={maximo}
-              disabled={!assinatura}
-              aria-label="Escreva uma resposta"
-              placeholder={assinatura ? "Escreva uma resposta…" : "Coloque seu nome acima para responder"}
-              className="min-h-10 flex-1 resize-none px-3 py-2 text-sm"
-            />
-            {texto.trim() === "" && (
+          <>
+            {anexo && (
+              <div className="flex items-center gap-2.5 rounded-xl bg-surface-2 px-3 py-2 ring-1 ring-inset ring-card-border">
+                <Icone nome={MIME_DO_ANEXO[anexo.type] === "documento" ? "documento" : "clipe"} tamanho={16} />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{anexo.name}</span>
+                <span className="shrink-0 text-xs tabular-nums text-ink-3">{formatarNumero(Math.max(1, Math.round(anexo.size / 1024)))} KB</span>
+                <button
+                  type="button"
+                  onClick={() => setAnexo(null)}
+                  disabled={enviarAnexo.isPending}
+                  aria-label="Tirar o anexo"
+                  title="Tirar o anexo"
+                  className="rounded-md p-1 text-ink-2 hover:bg-surface hover:text-ink"
+                >
+                  <Icone nome="x" tamanho={14} />
+                </button>
+              </div>
+            )}
+            <div className="flex items-end gap-2">
+              <input
+                ref={seletorRef}
+                type="file"
+                accept={Object.keys(MIME_DO_ANEXO).join(",")}
+                className="hidden"
+                onChange={(evento) => {
+                  escolherAnexo(evento.target.files?.[0]);
+                  evento.target.value = "";
+                }}
+              />
               <button
                 type="button"
-                onClick={() => void iniciarGravacao()}
-                disabled={enviarAudio.isPending}
-                aria-label="Gravar áudio"
-                title="Gravar áudio"
+                onClick={() => seletorRef.current?.click()}
+                disabled={!assinatura || enviarAnexo.isPending}
+                aria-label="Anexar foto, vídeo ou documento"
+                title="Anexar foto, vídeo ou documento"
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-card-border text-ink-2 transition-colors hover:border-baseline hover:text-ink disabled:opacity-50"
               >
-                <Icone nome="microfone" tamanho={16} />
+                <Icone nome="clipe" tamanho={16} />
               </button>
-            )}
-            <Button onClick={enviarAgora} disabled={!podeEnviar} className="h-10 shrink-0">
-              <Icone nome="enviar" tamanho={15} />
-              {enviar.isPending ? "Enviando…" : "Enviar"}
-            </Button>
-          </div>
+              <textarea
+                ref={campoRef}
+                value={texto}
+                onChange={(evento) => {
+                  setTexto(evento.target.value);
+                  onRascunho(evento.target.value);
+                  // Apagou tudo: o que vier a seguir já não é a sugestão.
+                  if (evento.target.value.trim() === "") setSugestaoId(null);
+                }}
+                onKeyDown={aoTeclar}
+                rows={Math.min(6, Math.max(1, texto.split("\n").length))}
+                maxLength={maximo}
+                disabled={!assinatura}
+                aria-label="Escreva uma resposta"
+                placeholder={!assinatura ? "Coloque seu nome acima para responder" : anexo ? "Legenda (opcional)…" : "Escreva uma resposta…"}
+                className="min-h-10 flex-1 resize-none px-3 py-2 text-sm"
+              />
+              {texto.trim() === "" && !anexo && (
+                <button
+                  type="button"
+                  onClick={() => void iniciarGravacao()}
+                  disabled={enviarAudio.isPending}
+                  aria-label="Gravar áudio"
+                  title="Gravar áudio"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-card-border text-ink-2 transition-colors hover:border-baseline hover:text-ink disabled:opacity-50"
+                >
+                  <Icone nome="microfone" tamanho={16} />
+                </button>
+              )}
+              <Button onClick={enviarAgora} disabled={!podeEnviar} className="h-10 shrink-0">
+                <Icone nome="enviar" tamanho={15} />
+                {enviar.isPending || enviarAnexo.isPending ? "Enviando…" : "Enviar"}
+              </Button>
+            </div>
+          </>
         )}
 
         {!gravando && (

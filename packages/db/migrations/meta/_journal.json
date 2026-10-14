@@ -85,6 +85,13 @@
       "when": 1791998460616,
       "tag": "0011_descadastros",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791998860012,
+      "tag": "0012_anexos",
+      "breakpoints": true
     }
   ]
 }

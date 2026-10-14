@@ -18,6 +18,8 @@ export const mensagensSaida = pgTable(
     // Preenchidos quando tipo = "audio": caminho servido pela API (ex.: /uploads/<arquivo>) e o mime type gravado.
     midiaUrl: varchar("midia_url", { length: 500 }),
     midiaMimeType: varchar("midia_mime_type", { length: 100 }),
+    // Nome do arquivo, quando é documento (aparece assim para o cliente no WhatsApp).
+    midiaNome: varchar("midia_nome", { length: 255 }),
     statusEnvio: statusEnvioEnum("status_envio").notNull().default("pendente"),
     tentativas: integer("tentativas").notNull().default(0),
     erroDetalhe: text("erro_detalhe"),

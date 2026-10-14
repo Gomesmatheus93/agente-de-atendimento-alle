@@ -24,6 +24,8 @@ export const respostasClientes = pgTable(
     texto: text("texto").notNull(),
     midiaUrl: varchar("midia_url", { length: 500 }),
     midiaMimeType: varchar("midia_mime_type", { length: 100 }),
+    // Nome do arquivo, quando é documento (ex.: "comprovante.pdf").
+    midiaNome: varchar("midia_nome", { length: 255 }),
     recebidaEm: timestamp("recebida_em", { withTimezone: true }).notNull(),
     // Quando alguém abriu a conversa no painel; nulo = ainda não lida.
     lidaEm: timestamp("lida_em", { withTimezone: true }),

@@ -22,7 +22,7 @@ export const detalheConversaInputSchema = z.object({
 
 // texto: escrita ou template; audio: nota de voz (equipe manda e recebe; figurinha só chega do cliente).
 // "imagem": hoje só de saída (imagens do agente, ver midias_agente); a recebida ainda é ignorada pelo webhook.
-export const TIPO_MENSAGEM = ["texto", "audio", "figurinha", "imagem"] as const;
+export const TIPO_MENSAGEM = ["texto", "audio", "figurinha", "imagem", "video", "documento"] as const;
 export type TipoMensagem = (typeof TIPO_MENSAGEM)[number];
 
 // Limite do WhatsApp para uma mensagem de texto.
@@ -60,6 +60,38 @@ export const enviarAudioInputSchema = z.object({
     .min(1, "Áudio vazio")
     .max(Math.ceil((MAX_AUDIO_BYTES * 4) / 3) + 100, "Áudio maior que o limite permitido"),
   mimeType: z.string().min(1).max(100),
+});
+
+// Anexo enviado pela equipe. O teto vem do corpo da requisição do painel (16 MB, e base64 cresce 1/3);
+// imagem tem o limite menor da Meta (5 MB).
+export const MAX_ANEXO_BYTES = 10 * 1024 * 1024;
+export const MAX_IMAGEM_BYTES = 5 * 1024 * 1024;
+export const TAMANHO_MAX_LEGENDA = 1024;
+
+// O que o WhatsApp aceita, e o tipo de mensagem que cada formato vira.
+export const MIME_DO_ANEXO: Record<string, "imagem" | "video" | "documento"> = {
+  "image/jpeg": "imagem",
+  "image/png": "imagem",
+  "video/mp4": "video",
+  "video/3gpp": "video",
+  "application/pdf": "documento",
+  "application/msword": "documento",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "documento",
+  "application/vnd.ms-excel": "documento",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "documento",
+  "text/plain": "documento",
+};
+
+export const enviarAnexoInputSchema = z.object({
+  telefone: telefoneConversaSchema,
+  numeroId: numeroIdSchema,
+  arquivoBase64: z
+    .string()
+    .min(1, "Arquivo vazio")
+    .max(Math.ceil((MAX_ANEXO_BYTES * 4) / 3) + 100, "Arquivo maior que 10 MB"),
+  mimeType: z.string().refine((mime) => mime in MIME_DO_ANEXO, "Formato não aceito pelo WhatsApp. Use JPG, PNG, MP4, PDF, Word, Excel ou TXT."),
+  nome: z.string().trim().min(1).max(255),
+  legenda: z.string().trim().max(TAMANHO_MAX_LEGENDA).default(""),
 });
 
 export const marcarComoNaoLidaInputSchema = z.object({

@@ -14,6 +14,7 @@ import {
 import {
   definirIaInputSchema,
   detalheConversaInputSchema,
+  enviarAnexoInputSchema,
   enviarAudioInputSchema,
   enviarRespostaInputSchema,
   gerarSugestaoInputSchema,
@@ -24,13 +25,16 @@ import {
   preencherTemplate,
   reenviarRespostaInputSchema,
   assinarMensagem,
+  MAX_IMAGEM_BYTES,
+  MIME_DO_ANEXO,
+  TAMANHO_MAX_LEGENDA,
   TAMANHO_MAX_RESPOSTA,
   type TipoMensagem,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import { and, count, countDistinct, desc, eq, inArray, isNotNull, isNull, ilike, max, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { salvarBase64 } from "../../media/armazenamento.js";
+import { salvarBase64, salvarBuffer } from "../../media/armazenamento.js";
 import { pedirSugestaoIa } from "../../queue.js";
 import {
   enfileirarResposta,
@@ -61,6 +65,8 @@ function previaDoConteudo(tipo: TipoMensagem, texto: string): string {
   if (tipo === "audio") return "🎤 Áudio";
   if (tipo === "figurinha") return "Figurinha";
   if (tipo === "imagem") return texto ? `🖼️ ${texto}` : "🖼️ Imagem";
+  if (tipo === "video") return texto ? `🎬 ${texto}` : "🎬 Vídeo";
+  if (tipo === "documento") return texto ? `📄 ${texto}` : "📄 Documento";
   return texto;
 }
 
@@ -338,6 +344,45 @@ export const conversasRouter = router({
         texto: "",
         midiaUrl: salvo.url,
         midiaMimeType: input.mimeType,
+      })
+      .returning({ id: mensagensSaida.id });
+
+    await enfileirarResposta(ctx.db, id, 1);
+    await marcarComoRespondida(ctx.db, input.telefone, input.numeroId);
+
+    return { id };
+  }),
+
+  // Foto, vídeo ou documento anexado no painel. Como toda resposta da equipe, sai assinado: o nome vai na
+  // legenda (com o texto que a pessoa escreveu, se escreveu).
+  enviarAnexo: procedimentoUnidade.input(enviarAnexoInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    const assinatura = ctx.usuario.assinatura?.trim();
+    if (!assinatura) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Coloque seu nome no chat antes de responder." });
+    }
+    const legenda = input.legenda ? assinarMensagem(assinatura, input.legenda) : `*${assinatura}*`;
+    if (legenda.length > TAMANHO_MAX_LEGENDA) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `Com o seu nome, a legenda passa de ${TAMANHO_MAX_LEGENDA} caracteres. Encurte um pouco.` });
+    }
+    const tipo = MIME_DO_ANEXO[input.mimeType]!;
+    const buffer = Buffer.from(input.arquivoBase64, "base64");
+    if (tipo === "imagem" && buffer.byteLength > MAX_IMAGEM_BYTES) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "O WhatsApp aceita imagens de até 5 MB. Envie como documento ou diminua a foto." });
+    }
+    garantirJanelaAberta(await ultimaMensagemDoCliente(ctx.db, input.telefone, input.numeroId));
+
+    const salvo = await salvarBuffer(buffer, input.mimeType);
+    const [{ id }] = await ctx.db
+      .insert(mensagensSaida)
+      .values({
+        telefone: input.telefone,
+        numeroId: input.numeroId,
+        tipo,
+        texto: legenda,
+        midiaUrl: salvo.url,
+        midiaMimeType: input.mimeType,
+        midiaNome: input.nome,
       })
       .returning({ id: mensagensSaida.id });
 

@@ -160,22 +160,28 @@ export interface MidiaDaMeta {
 
 // Mensagem de mídia (áudio, figurinha, imagem) chega no webhook só com um id; o conteúdo é baixado à
 // parte, em dois passos: GET /<media-id> devolve uma URL temporária, e essa URL exige o mesmo Bearer.
-export async function baixarMidia(mediaId: string, token: string): Promise<MidiaDaMeta> {
-  const metadados = await pedir<{ url?: string; mime_type?: string }>(mediaId, token);
+// Arquivo maior que o limite (documento de 100 MB, por exemplo) não é baixado: ficaria inteiro na memória.
+export class MidiaGrandeDemais extends Error {}
+
+export async function baixarMidia(mediaId: string, token: string, limiteBytes = Infinity): Promise<MidiaDaMeta> {
+  const metadados = await pedir<{ url?: string; mime_type?: string; file_size?: number }>(mediaId, token);
   if (!metadados.url) throw new ErroGraph("A Meta não devolveu a URL de download da mídia", 0);
+  if ((metadados.file_size ?? 0) > limiteBytes) throw new MidiaGrandeDemais(`Arquivo de ${metadados.file_size} bytes passa do limite`);
 
   let resposta: Response;
   try {
     resposta = await fetch(metadados.url, {
       headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(60_000),
     });
   } catch (erro) {
     throw new ErroGraph(`Não foi possível baixar a mídia da Meta: ${erro instanceof Error ? erro.message : String(erro)}`, 0);
   }
   if (!resposta.ok) throw new ErroGraph(`Falha ao baixar mídia (HTTP ${resposta.status})`, resposta.status);
 
+  if (Number(resposta.headers.get("content-length") ?? 0) > limiteBytes) throw new MidiaGrandeDemais("Arquivo passa do limite");
   const buffer = Buffer.from(await resposta.arrayBuffer());
+  if (buffer.byteLength > limiteBytes) throw new MidiaGrandeDemais("Arquivo passa do limite");
   return { buffer, mimeType: metadados.mime_type ?? resposta.headers.get("content-type") ?? "application/octet-stream" };
 }
 

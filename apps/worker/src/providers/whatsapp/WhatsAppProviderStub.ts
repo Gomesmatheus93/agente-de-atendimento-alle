@@ -1,4 +1,5 @@
 import type {
+  WhatsAppArquivoMessage,
   WhatsAppAudioMessage,
   WhatsAppImageMessage,
   WhatsAppProvider,
@@ -55,5 +56,15 @@ export class WhatsAppProviderStub implements WhatsAppProvider {
     }
 
     return { sucesso: true, mensagemId: `stub-imagem-${Date.now()}-${mensagem.telefone}` };
+  }
+
+  async enviarArquivo(mensagem: WhatsAppArquivoMessage): Promise<WhatsAppSendResult> {
+    console.warn(`[WhatsAppProviderStub] simulando ${mensagem.tipo}. telefone=${mensagem.telefone} arquivo=${mensagem.midiaUrl} nome=${mensagem.nome ?? ""}`);
+
+    if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
+      return { sucesso: false, erro: "Falha simulada pelo stub (telefone terminado em 0000)" };
+    }
+
+    return { sucesso: true, mensagemId: `stub-${mensagem.tipo}-${Date.now()}-${mensagem.telefone}` };
   }
 }

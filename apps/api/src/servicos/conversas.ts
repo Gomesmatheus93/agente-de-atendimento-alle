@@ -38,6 +38,8 @@ export interface MensagemDaConversa {
   tipo: TipoMensagem;
   texto: string;
   midiaUrl: string | null;
+  // Nome original do arquivo (documento do cliente ou anexo da equipe).
+  midiaNome: string | null;
   em: string;
   campanhaId: number | null;
   campanhaNome: string | null;
@@ -190,6 +192,7 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
         tipo: respostasClientes.tipo,
         texto: respostasClientes.texto,
         midiaUrl: respostasClientes.midiaUrl,
+        midiaNome: respostasClientes.midiaNome,
         em: respostasClientes.recebidaEm,
         lidaEm: respostasClientes.lidaEm,
         campanhaId: respostasClientes.campanhaId,
@@ -266,6 +269,7 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
       tipo: resposta.tipo,
       texto: resposta.texto,
       midiaUrl: resposta.midiaUrl,
+      midiaNome: resposta.midiaNome,
       em: resposta.em.toISOString(),
       campanhaId: resposta.campanhaId,
       campanhaNome: resposta.campanhaNome,
@@ -285,6 +289,7 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
               tipo: "texto" as const,
               texto: preencherTemplate(envio.conteudo, envio.parametros),
               midiaUrl: null,
+              midiaNome: null,
               em: envio.em.toISOString(),
               campanhaId: envio.campanhaId,
               campanhaNome: envio.campanhaNome,
@@ -305,6 +310,7 @@ export async function obterConversa(db: Db, telefone: string, numeroId: number) 
         tipo: saida.tipo,
         texto: saida.texto,
         midiaUrl: saida.midiaUrl,
+        midiaNome: saida.midiaNome,
         em: saida.createdAt.toISOString(),
         campanhaId: null,
         campanhaNome: null,

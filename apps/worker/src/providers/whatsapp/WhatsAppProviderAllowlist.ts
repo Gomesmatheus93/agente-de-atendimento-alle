@@ -1,5 +1,6 @@
 import { normalizarTelefone } from "@atendimento-academias/shared";
 import type {
+  WhatsAppArquivoMessage,
   WhatsAppAudioMessage,
   WhatsAppImageMessage,
   WhatsAppProvider,
@@ -54,5 +55,9 @@ export class WhatsAppProviderAllowlist implements WhatsAppProvider {
 
   async enviarImagem(mensagem: WhatsAppImageMessage): Promise<WhatsAppSendResult> {
     return this.bloqueio(mensagem.telefone) ?? this.provider.enviarImagem(mensagem);
+  }
+
+  async enviarArquivo(mensagem: WhatsAppArquivoMessage): Promise<WhatsAppSendResult> {
+    return this.bloqueio(mensagem.telefone) ?? this.provider.enviarArquivo(mensagem);
   }
 }

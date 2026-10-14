@@ -27,7 +27,7 @@ import {
   tokenDeVerificacaoConhecido,
   unidadesDasContas,
 } from "../config/plataforma.js";
-import { baixarMidia } from "../meta/graph.js";
+import { baixarMidia, MidiaGrandeDemais } from "../meta/graph.js";
 import { salvarBuffer } from "../media/armazenamento.js";
 import { pedirAnaliseDaConversa, pedirSugestaoIa } from "../queue.js";
 import { enviarMensagem } from "../servicos/conversas.js";
@@ -37,6 +37,14 @@ import { getDb } from "../trpc/context.js";
 const JANELA_ATRIBUICAO_MS = 7 * 86_400_000;
 
 // Formato do webhook da WhatsApp Cloud API (Meta). Só os campos que usamos.
+// Foto, vídeo e documento chegam com o mesmo formato: id da mídia, legenda opcional e (documento) o nome.
+const midiaComLegendaSchema = z.object({
+  id: z.string(),
+  mime_type: z.string().optional(),
+  caption: z.string().optional(),
+  filename: z.string().optional(),
+});
+
 const payloadSchema = z.object({
   entry: z
     .array(
@@ -92,11 +100,14 @@ const payloadSchema = z.object({
                     id: z.string(),
                     from: z.string(),
                     timestamp: z.string(),
-                    // text, image, audio, sticker, reaction, ... — tratamos texto, áudio e figurinha.
+                    // text, image, video, document, audio, sticker, reaction, ... — reação e localização ficam de fora.
                     type: z.string().optional(),
                     text: z.object({ body: z.string() }).optional(),
                     audio: z.object({ id: z.string(), mime_type: z.string().optional() }).optional(),
                     sticker: z.object({ id: z.string(), mime_type: z.string().optional() }).optional(),
+                    image: midiaComLegendaSchema.optional(),
+                    video: midiaComLegendaSchema.optional(),
+                    document: midiaComLegendaSchema.optional(),
                     button: z.object({ text: z.string() }).optional(),
                     interactive: z
                       .object({
@@ -124,6 +135,7 @@ interface ConteudoMensagem {
   texto: string;
   midiaUrl: string | null;
   midiaMimeType: string | null;
+  midiaNome?: string | null;
 }
 
 interface RequisicaoComCorpoBruto extends Request {
@@ -221,6 +233,7 @@ async function acionarAgenteSeLigado(
             tipo: conteudo.tipo,
             texto: conteudo.texto,
             midiaUrl: conteudo.midiaUrl,
+            midiaNome: conteudo.midiaNome ?? null,
             recebidaEm: new Date().toISOString(),
           },
         }),
@@ -240,22 +253,30 @@ async function acionarAgenteSeLigado(
   }
 }
 
-// Baixa áudio/figurinha da Meta (a mensagem só traz o id) e grava no disco local. Falha aqui não derruba
-// o webhook inteiro: a mensagem simplesmente não vira resposta, como já acontecia com tipos sem texto.
+// Até aqui o arquivo é guardado; acima disso a conversa mostra que chegou, sem o arquivo.
+const LIMITE_MIDIA_BYTES = 25 * 1024 * 1024;
+
+// Baixa a mídia da Meta (a mensagem só traz o id) e guarda no armazenamento (S3). Áudio e figurinha sem
+// arquivo não dizem nada, então a falha descarta a mensagem; foto, vídeo e documento ainda têm legenda e
+// nome, e entram mesmo sem o arquivo — a equipe vê que o cliente mandou algo.
 async function baixarEArmazenarMidia(
   db: Db,
-  mediaId: string,
+  midia: { id: string; mime_type?: string; caption?: string; filename?: string },
   contaId: number,
-  tipo: "audio" | "figurinha",
+  tipo: "audio" | "figurinha" | "imagem" | "video" | "documento",
 ): Promise<ConteudoMensagem | null> {
+  const texto = midia.caption?.trim() ?? "";
+  const midiaNome = midia.filename?.trim().slice(0, 255) || null;
   try {
     const token = await tokenDaConta(db, contaId);
-    const midia = await baixarMidia(mediaId, token);
-    const salvo = await salvarBuffer(midia.buffer, midia.mimeType);
-    return { tipo, texto: "", midiaUrl: salvo.url, midiaMimeType: midia.mimeType };
+    const baixada = await baixarMidia(midia.id, token, LIMITE_MIDIA_BYTES);
+    const salvo = await salvarBuffer(baixada.buffer, baixada.mimeType);
+    return { tipo, texto, midiaUrl: salvo.url, midiaMimeType: baixada.mimeType, midiaNome };
   } catch (erro) {
-    console.error(`[webhook-whatsapp] falha ao baixar ${tipo} (media id ${mediaId}):`, erro);
-    return null;
+    if (erro instanceof MidiaGrandeDemais) console.warn(`[webhook-whatsapp] ${tipo} grande demais para guardar (media id ${midia.id})`);
+    else console.error(`[webhook-whatsapp] falha ao baixar ${tipo} (media id ${midia.id}):`, erro);
+    if (tipo === "audio" || tipo === "figurinha") return null;
+    return { tipo, texto, midiaUrl: null, midiaMimeType: midia.mime_type ?? null, midiaNome };
   }
 }
 
@@ -322,6 +343,7 @@ async function registrarResposta(
       texto: conteudo.texto,
       midiaUrl: conteudo.midiaUrl,
       midiaMimeType: conteudo.midiaMimeType,
+      midiaNome: conteudo.midiaNome ?? null,
       recebidaEm,
     })
     // Mensagem já registrada (webhook reenviado): mantém a linha como está.
@@ -621,13 +643,19 @@ export function criarWebhookWhatsapp(): Router {
           : null;
 
         if (!conteudo && mensagem.type === "audio" && mensagem.audio) {
-          conteudo = await baixarEArmazenarMidia(db, mensagem.audio.id, mensagem.contaId!, "audio");
+          conteudo = await baixarEArmazenarMidia(db, mensagem.audio, mensagem.contaId!, "audio");
         } else if (!conteudo && mensagem.type === "sticker" && mensagem.sticker) {
-          conteudo = await baixarEArmazenarMidia(db, mensagem.sticker.id, mensagem.contaId!, "figurinha");
+          conteudo = await baixarEArmazenarMidia(db, mensagem.sticker, mensagem.contaId!, "figurinha");
+        } else if (!conteudo && mensagem.type === "image" && mensagem.image) {
+          conteudo = await baixarEArmazenarMidia(db, mensagem.image, mensagem.contaId!, "imagem");
+        } else if (!conteudo && mensagem.type === "video" && mensagem.video) {
+          conteudo = await baixarEArmazenarMidia(db, mensagem.video, mensagem.contaId!, "video");
+        } else if (!conteudo && mensagem.type === "document" && mensagem.document) {
+          conteudo = await baixarEArmazenarMidia(db, mensagem.document, mensagem.contaId!, "documento");
         }
 
         if (!conteudo) {
-          // Imagem, reação, vídeo, documento: chegam no webhook mas ainda não viram resposta do cliente.
+          // Reação, localização, contato: chegam no webhook mas não viram resposta do cliente.
           console.log(`[webhook-whatsapp] ignorada: mensagem de ${mensagem.from} sem conteúdo tratável (tipo ${mensagem.type ?? "desconhecido"})`);
           continue;
         }

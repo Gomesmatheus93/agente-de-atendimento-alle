@@ -1,5 +1,6 @@
-import { lerMidiaLocal } from "../../media/armazenamento.js";
+import { lerArquivo } from "@atendimento-academias/db";
 import type {
+  WhatsAppArquivoMessage,
   WhatsAppAudioMessage,
   WhatsAppImageMessage,
   WhatsAppProvider,
@@ -165,6 +166,27 @@ export class WhatsAppProviderCloudApi implements WhatsAppProvider {
     });
   }
 
+  async enviarArquivo(mensagem: WhatsAppArquivoMessage): Promise<WhatsAppSendResult> {
+    let mediaId: string;
+    try {
+      const { buffer, mimeType } = await lerArquivo(mensagem.midiaUrl);
+      mediaId = await this.subirMidia(buffer, mimeType, mensagem.nome ?? (mensagem.tipo === "video" ? "video" : "documento"));
+    } catch (erro) {
+      return { sucesso: false, erro: `Falha ao subir o arquivo para a Meta: ${erro instanceof Error ? erro.message : String(erro)}` };
+    }
+    const legenda = mensagem.legenda ? { caption: mensagem.legenda } : {};
+    return this.enviar(
+      mensagem.tipo === "video"
+        ? { messaging_product: "whatsapp", to: mensagem.telefone, type: "video", video: { id: mediaId, ...legenda } }
+        : {
+            messaging_product: "whatsapp",
+            to: mensagem.telefone,
+            type: "document",
+            document: { id: mediaId, ...legenda, ...(mensagem.nome ? { filename: mensagem.nome } : {}) },
+          },
+    );
+  }
+
   // Serve à imagem de cabeçalho de template e às imagens do agente: arquivo local sobe uma vez por número.
   private async imagemDoCabecalho(valor: string): Promise<ParametroImagem["image"]> {
     if (!valor.startsWith("/uploads/")) return referenciaDaImagem(valor);
@@ -173,8 +195,9 @@ export class WhatsAppProviderCloudApi implements WhatsAppProvider {
     const guardado = mediaIdPorImagem.get(chave);
     if (guardado && Date.now() - guardado.em < VALIDADE_MEDIA_ID_MS) return { id: guardado.id };
 
-    const mimeType = valor.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
-    const id = await this.subirMidia(await lerMidiaLocal(valor), mimeType, "cabecalho");
+    const arquivo = await lerArquivo(valor);
+    const mimeType = arquivo.mimeType.startsWith("image/") ? arquivo.mimeType : valor.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    const id = await this.subirMidia(arquivo.buffer, mimeType, "cabecalho");
     mediaIdPorImagem.set(chave, { id, em: Date.now() });
     return { id };
   }

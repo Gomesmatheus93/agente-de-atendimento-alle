@@ -33,6 +33,16 @@ export interface WhatsAppImageMessage {
   legenda?: string;
 }
 
+// Anexo enviado pela equipe (vídeo ou documento): o arquivo guardado ("/uploads/...") sobe para a Meta e
+// vai pelo id. Documento chega ao cliente com o nome original.
+export interface WhatsAppArquivoMessage {
+  telefone: string;
+  tipo: "video" | "documento";
+  midiaUrl: string;
+  legenda?: string;
+  nome?: string;
+}
+
 export interface WhatsAppSendResult {
   sucesso: boolean;
   mensagemId?: string;
@@ -44,4 +54,5 @@ export interface WhatsAppProvider {
   enviarTexto(mensagem: WhatsAppTextMessage): Promise<WhatsAppSendResult>;
   enviarAudio(mensagem: WhatsAppAudioMessage): Promise<WhatsAppSendResult>;
   enviarImagem(mensagem: WhatsAppImageMessage): Promise<WhatsAppSendResult>;
+  enviarArquivo(mensagem: WhatsAppArquivoMessage): Promise<WhatsAppSendResult>;
 }

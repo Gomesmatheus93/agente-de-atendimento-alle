@@ -51,10 +51,20 @@ painel.get("/uploads/:arquivo", async (req, res) => {
   }
   try {
     const { buffer, mimeType } = await lerArquivo(req.params.arquivo);
-    res.setHeader("Content-Type", mimeType);
+    // O arquivo pode vir do cliente (documento qualquer). Só imagem, vídeo, áudio, PDF e texto abrem no
+    // navegador; o resto (um .html, por exemplo) baixa, para não rodar dentro do painel. E nada roda script.
+    const base = mimeType.split(";")[0]!.trim().toLowerCase();
+    const abreNoNavegador = /^(image\/(png|jpeg|webp|gif)|video\/|audio\/)/.test(base) || base === "application/pdf" || base === "text/plain";
+    const nome = typeof req.query.nome === "string" && req.query.nome.trim() ? req.query.nome.trim().slice(0, 255) : nomeDoArquivo(req.params.arquivo);
+    res.setHeader("Content-Type", abreNoNavegador ? mimeType : "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // O leitor de PDF do Chrome não abre sob "sandbox"; ele já roda isolado do painel.
+    if (base !== "application/pdf") res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'");
     res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
-    // Documento abre no navegador quando dá (PDF), sem virar página do painel.
-    res.setHeader("Content-Disposition", `inline; filename="${nomeDoArquivo(req.params.arquivo)}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `${abreNoNavegador ? "inline" : "attachment"}; filename="${nome.replace(/[^\w.\- ]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(nome)}`,
+    );
     res.send(buffer);
   } catch (erro) {
     res.status(erro instanceof ArquivoNaoEncontrado ? 404 : 500).end();
