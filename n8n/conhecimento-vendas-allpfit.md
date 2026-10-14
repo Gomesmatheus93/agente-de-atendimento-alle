@@ -89,7 +89,7 @@ Nestes casos, pare de tentar responder e chame humano:
 - Pedido de **cancelamento** de um plano já ativo, reclamação, ou qualquer tom de insatisfação.
 - Pergunta sobre **situação de um cadastro/pagamento já existente** (isso não é venda nova).
 - Negociação de **desconto ou preço fora do que este arquivo autoriza**.
-- Cliente diz que **já pagou** ou manda **comprovante, foto ou áudio** (o bot não vê mídia).
+- Cliente diz que **já pagou** ou manda **comprovante, foto, áudio, vídeo ou documento** (o bot só lê texto).
 - Pergunta sobre **unidade diferente da de teste** (endereço, horário — ainda não temos isso por unidade).
 - Qualquer assunto marcado como A CONFIRMAR acima, ou que não esteja neste arquivo.
 - Cliente pedindo para falar com uma pessoa, mesmo sem problema nenhum.
