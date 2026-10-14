@@ -9,7 +9,8 @@ export type Rota =
   | { tela: "funil" }
   // criarNaConta: formulário de novo template para aquela conta (#/templates/novo/<contaId>).
   | { tela: "templates"; criarNaConta: number | null }
-  | { tela: "conversas"; telefone: string | null; numeroId: number | null }
+  // instagramId: DM do Instagram aberta (#/conversas/instagram/<id>).
+  | { tela: "conversas"; telefone: string | null; numeroId: number | null; instagramId?: number | null }
   | { tela: "relatorios" }
   | { tela: "duvidas" }
   | { tela: "configuracoes" }
@@ -24,6 +25,10 @@ export function parseHash(hash: string): Rota {
 
   if (partes[0] === "nova-campanha") return { tela: "nova-campanha" };
   // A conversa é identificada pelo par número + telefone: #/conversas/<numeroId>/<telefone>
+  if (partes[0] === "conversas" && partes[1] === "instagram") {
+    const id = Number(partes[2]);
+    return { tela: "conversas", telefone: null, numeroId: null, instagramId: Number.isInteger(id) && id > 0 ? id : null };
+  }
   if (partes[0] === "conversas") {
     const numeroId = Number(partes[1]);
     const telefone = /^\d{10,15}$/.test(partes[2] ?? "") ? partes[2]! : null;
@@ -71,6 +76,7 @@ export function hrefDe(rota: Rota): string {
     case "templates":
       return rota.criarNaConta === null ? "#/templates" : `#/templates/novo/${rota.criarNaConta}`;
     case "conversas":
+      if (rota.instagramId) return `#/conversas/instagram/${rota.instagramId}`;
       return rota.telefone === null || rota.numeroId === null ? "#/conversas" : `#/conversas/${rota.numeroId}/${rota.telefone}`;
     case "relatorios":
       return "#/relatorios";

@@ -10,6 +10,7 @@ import { cabecalhosDeSeguranca } from "./seguranca.js";
 import { iniciarMonitorDeSaude } from "./saude/monitor.js";
 import { createContext, getDb, usuarioDoCookie } from "./trpc/context.js";
 import { appRouter } from "./trpc/router.js";
+import { criarWebhookInstagram } from "./webhooks/instagram.js";
 import { criarWebhookWhatsapp } from "./webhooks/whatsapp.js";
 
 // Dois servidores com exposições diferentes:
@@ -87,6 +88,7 @@ painel.get("/exclusao-de-dados", paginaExclusao);
 // têm autenticação própria (assinatura da Meta / chave de integração), como no servidor do webhook.
 if (process.env.NODE_ENV === "production") {
   painel.use("/webhooks/whatsapp", criarWebhookWhatsapp());
+  painel.use("/webhooks/instagram", criarWebhookInstagram());
   painel.use("/integracoes", criarRouterIntegracoes());
 }
 
@@ -102,6 +104,7 @@ webhook.disable("x-powered-by");
 if (process.env.NODE_ENV === "production") webhook.set("trust proxy", 1);
 webhook.use(cabecalhosDeSeguranca(null));
 webhook.use("/webhooks/whatsapp", criarWebhookWhatsapp());
+webhook.use("/webhooks/instagram", criarWebhookInstagram());
 webhook.use("/integracoes", criarRouterIntegracoes());
 webhook.get("/health", (_req, res) => {
   res.json({ status: "ok" });

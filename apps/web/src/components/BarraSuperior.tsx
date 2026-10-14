@@ -39,7 +39,9 @@ export function BarraSuperior() {
   const { tema, alternar } = useTema();
   const usuario = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario;
   const comUnidade = Boolean(usuario?.unidadeId);
-  const naoLidas = trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0;
+  const naoLidas =
+    (trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0) +
+    (trpc.dmsInstagram.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0);
   const esperando = usePedidosDeHumano().data?.length ?? 0;
   const problemas = useProblemasDeSaude(comUnidade);
   const sair = trpc.auth.sair.useMutation({ onSettled: () => void utils.invalidate() });

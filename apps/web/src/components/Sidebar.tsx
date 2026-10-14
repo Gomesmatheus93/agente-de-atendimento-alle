@@ -67,8 +67,10 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   const usuario = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario;
   const papel = usuario?.papel;
   const comUnidade = Boolean(usuario?.unidadeId);
+  // WhatsApp + DMs do Instagram.
   const naoLidas =
-    trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0;
+    (trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0) +
+    (trpc.dmsInstagram.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0);
   const ehSuperadmin = papel === "superadmin";
   const ehAdmin = papel === "admin" || ehSuperadmin;
   const precisamDeHumano = usePedidosDeHumano().data?.length ?? 0;

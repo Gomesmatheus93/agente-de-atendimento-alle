@@ -74,6 +74,10 @@ export type ModoAgente = (typeof MODOS_AGENTE)[number];
 // URL que a API chama (POST) a cada mensagem nova do cliente, quando o modo é "n8n".
 export const CHAVE_N8N_WEBHOOK_URL = "integracao.n8n_webhook_url";
 
+// URL do fluxo do n8n que responde as DMs do Instagram (separado do WhatsApp: o formato da conversa é outro).
+// Vazio = as DMs ficam só com a equipe.
+export const CHAVE_N8N_INSTAGRAM_URL = "integracao.n8n_instagram_url";
+
 // Imagens que o agente (n8n) anexa às respostas, pelo nome: "planos" -> tabela de planos. O arquivo fica
 // em uploads/ e o worker sobe para a Meta na hora de enviar (reaproveitando o id por alguns dias).
 export const midiasAgente = pgTable(

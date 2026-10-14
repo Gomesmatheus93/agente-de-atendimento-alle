@@ -9,8 +9,9 @@ import { cadastrarNoEvo, dadosDeCadastroSchema, extrairPedidoDeCadastro, situaca
 import { configEvo, ErroEvo, situacaoNoEvo } from "../evo/cliente.js";
 import { chaveBloqueada, registrarFalhaDeChave } from "../seguranca.js";
 import { getDb } from "../trpc/context.js";
-import { midiasAgente } from "@atendimento-academias/db";
-import { and, eq } from "drizzle-orm";
+import { mensagensInstagram, midiasAgente } from "@atendimento-academias/db";
+import { and, desc, eq } from "drizzle-orm";
+import { conversaDaUnidade, enviarDm, janelaAberta, passarDmParaHumano } from "../instagram/dms.js";
 
 // API para automação externa (n8n, Zapier, um script...) disparar campanha sem passar pela tela.
 // Fica no servidor do webhook (público) porque quem chama não roda na mesma máquina; a única porta
@@ -231,6 +232,87 @@ export function criarRouterIntegracoes(): Router {
       }
       console.error("[integracoes] falha ao passar para humano:", erro);
       res.status(500).json({ error: "Falha inesperada ao passar para humano" });
+    }
+  });
+
+  // ---------- DMs do Instagram (fluxo do n8n das DMs) ----------
+
+  function responderErro(res: express.Response, erro: unknown, contexto: string) {
+    if (erro instanceof TRPCError) {
+      res.status(CODIGO_HTTP[erro.code] ?? 500).json({ error: erro.message });
+      return;
+    }
+    console.error(`[integracoes] falha ao ${contexto}:`, erro);
+    res.status(500).json({ error: `Falha inesperada ao ${contexto}` });
+  }
+
+  // Histórico da DM: mensagens em ordem, quem mandou cada uma e se a janela de 24h está aberta.
+  router.get("/instagram/conversas", async (req, res) => {
+    const conversaId = Number(req.query.conversaId);
+    if (!Number.isInteger(conversaId) || conversaId <= 0) {
+      res.status(400).json({ error: "Informe conversaId (query string)" });
+      return;
+    }
+    try {
+      const db = getDb();
+      const { conversa } = await conversaDaUnidade(db, conversaId, res.locals.unidadeId as number);
+      const mensagens = await db
+        .select({ origem: mensagensInstagram.origem, texto: mensagensInstagram.texto, status: mensagensInstagram.statusEnvio, em: mensagensInstagram.criadaEm })
+        .from(mensagensInstagram)
+        .where(eq(mensagensInstagram.conversaId, conversaId))
+        .orderBy(desc(mensagensInstagram.criadaEm))
+        .limit(60);
+      res.status(200).json({
+        conversaId,
+        username: conversa.username,
+        nome: conversa.nome,
+        iaAtiva: conversa.iaAtiva,
+        precisaHumano: conversa.precisaHumano,
+        janelaAberta: janelaAberta(conversa.ultimaDoClienteEm),
+        mensagens: mensagens
+          .reverse()
+          .filter((m) => m.status !== "falhou")
+          .map((m) => ({ direcao: m.origem === "cliente" ? "recebida" : "enviada", origem: m.origem, texto: m.texto, em: m.em.toISOString() })),
+      });
+    } catch (erro) {
+      responderErro(res, erro, "buscar a conversa do Instagram");
+    }
+  });
+
+  // Resposta do bot na DM (sai na hora; até 1000 caracteres).
+  router.post("/instagram/mensagens", async (req, res) => {
+    const entrada = z.object({ conversaId: z.number().int().positive(), texto: z.string().trim().min(1).max(1000) }).safeParse(req.body);
+    if (!entrada.success) {
+      res.status(400).json({ error: "Dados inválidos", detalhes: entrada.error.flatten() });
+      return;
+    }
+    try {
+      const db = getDb();
+      const { conversa } = await conversaDaUnidade(db, entrada.data.conversaId, res.locals.unidadeId as number);
+      // Alguém da equipe assumiu (ou desligou o bot) enquanto o fluxo pensava: não responde por cima.
+      if (!conversa.iaAtiva || conversa.precisaHumano) {
+        res.status(409).json({ error: "O bot está desligado nesta conversa (ou ela está com uma pessoa da equipe)." });
+        return;
+      }
+      const resultado = await enviarDm(db, entrada.data.conversaId, res.locals.unidadeId as number, entrada.data.texto, "bot", null);
+      res.status(resultado.enviada ? 201 : 502).json(resultado);
+    } catch (erro) {
+      responderErro(res, erro, "enviar a DM");
+    }
+  });
+
+  router.post("/instagram/humano", async (req, res) => {
+    const entrada = z.object({ conversaId: z.number().int().positive(), motivo: z.string().trim().min(1).max(300) }).safeParse(req.body);
+    if (!entrada.success) {
+      res.status(400).json({ error: "Dados inválidos", detalhes: entrada.error.flatten() });
+      return;
+    }
+    try {
+      await conversaDaUnidade(getDb(), entrada.data.conversaId, res.locals.unidadeId as number);
+      await passarDmParaHumano(getDb(), entrada.data.conversaId, entrada.data.motivo);
+      res.status(200).json({ ok: true });
+    } catch (erro) {
+      responderErro(res, erro, "passar a DM para humano");
     }
   });
 

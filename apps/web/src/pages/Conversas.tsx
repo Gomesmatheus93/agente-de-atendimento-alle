@@ -21,6 +21,7 @@ import {
   type Nota,
 } from "../components/Atendimento.js";
 import { EtiquetasDaConversa } from "../components/Etiquetas.js";
+import { ConversasInstagram } from "./ConversasInstagram.js";
 import { SeloDescadastro, SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
@@ -82,7 +83,79 @@ function lerBuscaDaBarra(): string {
   }
 }
 
-export function Conversas({ telefone, numeroId }: { telefone: string | null; numeroId: number | null }) {
+// WhatsApp e, quando a unidade conectou o Instagram, as DMs: um seletor no topo da lista troca o canal.
+type Canal = "whatsapp" | "instagram";
+const CHAVE_CANAL = "conversas-canal";
+
+function lerCanal(): Canal {
+  try {
+    return sessionStorage.getItem(CHAVE_CANAL) === "instagram" ? "instagram" : "whatsapp";
+  } catch {
+    return "whatsapp";
+  }
+}
+
+export function Conversas({ telefone, numeroId, instagramId }: { telefone: string | null; numeroId: number | null; instagramId: number | null }) {
+  const instagram = trpc.dmsInstagram.estado.useQuery(undefined, { staleTime: 60_000 }).data;
+  const naoLidasWhatsapp = trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000 }).data?.conversas ?? 0;
+  const naoLidasInstagram = trpc.dmsInstagram.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: Boolean(instagram?.conectada) }).data?.conversas ?? 0;
+  const [canalEscolhido, setCanalEscolhido] = useState<Canal>(lerCanal);
+  const canal: Canal = instagramId ? "instagram" : telefone ? "whatsapp" : canalEscolhido;
+  // Abrir uma conversa pelo link (ou pela busca) também escolhe o canal: ao voltar para a lista, fica nele.
+  useEffect(() => {
+    if (!instagramId && !telefone) return;
+    const doLink: Canal = instagramId ? "instagram" : "whatsapp";
+    setCanalEscolhido(doLink);
+    try {
+      sessionStorage.setItem(CHAVE_CANAL, doLink);
+    } catch {
+      // sem armazenamento
+    }
+  }, [instagramId, telefone]);
+
+  function trocar(novo: Canal) {
+    setCanalEscolhido(novo);
+    try {
+      sessionStorage.setItem(CHAVE_CANAL, novo);
+    } catch {
+      // sem armazenamento: vale só nesta tela
+    }
+    window.location.hash = hrefDe({ tela: "conversas", telefone: null, numeroId: null });
+  }
+
+  const seletor = instagram?.conectada ? (
+    <div role="tablist" aria-label="Canal" className="grid grid-cols-2 gap-1 rounded-full bg-surface-2 p-1">
+      {(
+        [
+          ["whatsapp", "WhatsApp", naoLidasWhatsapp],
+          ["instagram", "Instagram", naoLidasInstagram],
+        ] as const
+      ).map(([valor, rotulo, contador]) => (
+        <button
+          key={valor}
+          type="button"
+          role="tab"
+          aria-selected={canal === valor}
+          onClick={() => trocar(valor)}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+            canal === valor ? "bg-accent text-accent-contrast" : "text-ink-2 hover:text-ink"
+          }`}
+        >
+          <Icone nome={valor === "instagram" ? "instagram" : "mensagem"} tamanho={13} />
+          {rotulo}
+          {contador > 0 && (
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-2 px-1 text-[10px] font-bold text-brand-2-contrast">{contador}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (canal === "instagram" && instagram?.conectada) return <ConversasInstagram conversaId={instagramId} seletor={seletor} />;
+  return <ConversasWhatsapp telefone={telefone} numeroId={numeroId} seletor={seletor} />;
+}
+
+function ConversasWhatsapp({ telefone, numeroId, seletor }: { telefone: string | null; numeroId: number | null; seletor: ReactNode }) {
   // Rascunhos por contato: trocar de conversa no meio de uma resposta não apaga o que foi digitado.
   const rascunhos = useRef<Record<string, string>>({});
   // A busca da barra superior abre esta tela já filtrada.
@@ -111,10 +184,13 @@ export function Conversas({ telefone, numeroId }: { telefone: string | null; num
 
   if (listaQuery.data?.length === 0 && !filtrando) {
     return (
+      <div className="flex flex-col gap-4">
+        {seletor && <div className="max-w-sm">{seletor}</div>}
       <EstadoVazio
         titulo="Nenhuma conversa ainda"
         descricao="Quando um cliente responder a um disparo, a conversa aparece aqui. As respostas chegam pelo webhook do WhatsApp (/webhooks/whatsapp na API)."
       />
+      </div>
     );
   }
 
@@ -125,6 +201,7 @@ export function Conversas({ telefone, numeroId }: { telefone: string | null; num
         className={`min-h-0 flex-col border-card-border lg:border-r ${telefone ? "hidden lg:flex" : "flex"}`}
       >
         <div className="flex flex-col gap-3 border-b border-card-border p-3">
+          {seletor}
           <label className="relative block">
             <span className="sr-only">Buscar conversas</span>
             <Icone nome="busca" tamanho={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
@@ -241,7 +318,7 @@ function iniciais(nome: string): string {
     .join("");
 }
 
-function Avatar({ nome, tamanho = "md" }: { nome: string | null; tamanho?: "md" | "lg" }) {
+export function Avatar({ nome, tamanho = "md" }: { nome: string | null; tamanho?: "md" | "lg" }) {
   return (
     <span
       aria-hidden="true"
@@ -322,7 +399,7 @@ function ItemDaLista({ conversa, selecionada }: { conversa: ConversaResumo; sele
   );
 }
 
-function SemConversaSelecionada() {
+export function SemConversaSelecionada() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
       <span className="mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent-text">
@@ -869,11 +946,11 @@ function comNegrito(texto: string): ReactNode[] {
 
 // Nome do funcionário nas respostas: escolhido uma vez (fica salvo no usuário) e trocável a qualquer momento.
 // Sem ele o envio fica travado — toda resposta pelo painel sai assinada.
-function useAssinatura() {
+export function useAssinatura() {
   return trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.assinatura ?? null;
 }
 
-function Assinatura({ assinatura }: { assinatura: string | null }) {
+export function Assinatura({ assinatura }: { assinatura: string | null }) {
   const utils = trpc.useUtils();
   const [editando, setEditando] = useState(false);
   const [nome, setNome] = useState(assinatura ?? "");
@@ -1413,7 +1490,7 @@ function CompositorDeNota({ telefone, numeroId }: { telefone: string; numeroId: 
 }
 
 // O cliente pediu uma pessoa ou o bot não soube responder: o bot fica parado até alguém encerrar.
-function AvisoDeHumano({ motivo, ocupado, onResolver }: { motivo: string | null; ocupado: boolean; onResolver: () => void }) {
+export function AvisoDeHumano({ motivo, ocupado, onResolver }: { motivo: string | null; ocupado: boolean; onResolver: () => void }) {
   return (
     <div role="status" className="border-t border-amber-200 bg-amber-50 px-4 py-3 sm:px-6">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
@@ -1505,7 +1582,7 @@ function CartaoDaSugestao({ telefone, numeroId, sugestao, pedindo, onPedir, onEd
   );
 }
 
-function InterruptorDaIa({ ativa, onAlternar }: { ativa: boolean; onAlternar: (ativa: boolean) => void }) {
+export function InterruptorDaIa({ ativa, onAlternar }: { ativa: boolean; onAlternar: (ativa: boolean) => void }) {
   return (
     <button
       type="button"
@@ -1534,7 +1611,7 @@ function InterruptorDaIa({ ativa, onAlternar }: { ativa: boolean; onAlternar: (a
 // Abaixo disso a janela é destacada em âmbar: dá tempo de responder, mas pouco.
 const LIMIAR_ACABANDO_MS = 2 * 60 * 60 * 1000;
 
-function IndicadorDaJanela({ expiraEm }: { expiraEm: string | null }) {
+export function IndicadorDaJanela({ expiraEm }: { expiraEm: string | null }) {
   const agora = useAgora(30_000);
   const [aberto, setAberto] = useState(false);
   const raizRef = useRef<HTMLDivElement>(null);

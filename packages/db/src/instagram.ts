@@ -84,6 +84,44 @@ async function get<T>(caminho: string, params: Record<string, string>, token: st
   return lerResposta<T>(resposta);
 }
 
+async function post<T>(caminho: string, corpo: unknown, token: string, params: Record<string, string> = {}): Promise<T> {
+  const url = new URL(`${GRAPH}/${caminho}`);
+  for (const [chave, valor] of Object.entries(params)) url.searchParams.set(chave, valor);
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: corpo === undefined ? undefined : JSON.stringify(corpo),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (erro) {
+    throw new ErroInstagram(`Não foi possível falar com o Instagram: ${erro instanceof Error ? erro.message : String(erro)}`, 0);
+  }
+  return lerResposta<T>(resposta);
+}
+
+// ---------- DMs ----------
+
+// Inscreve a conta para a Meta mandar as DMs ao webhook do app (/webhooks/instagram).
+export async function ativarDmsInstagram(token: string): Promise<void> {
+  await post<{ success?: boolean }>("me/subscribed_apps", undefined, token, { subscribed_fields: "messages" });
+}
+
+// Nome e @ de quem mandou a DM (só funciona para quem já escreveu para a conta).
+export function buscarPessoaInstagram(igsid: string, token: string): Promise<{ name?: string; username?: string }> {
+  return get<{ name?: string; username?: string }>(igsid, { fields: "name,username" }, token);
+}
+
+// A Meta aceita até 1000 caracteres por DM de texto.
+export const TAMANHO_MAX_DM = 1000;
+
+export async function enviarDmInstagram(igsid: string, texto: string, token: string): Promise<{ mid: string }> {
+  const resposta = await post<{ message_id?: string }>("me/messages", { recipient: { id: igsid }, message: { text: texto } }, token);
+  if (!resposta.message_id) throw new ErroInstagram("O Instagram não devolveu o id da mensagem enviada", 0);
+  return { mid: resposta.message_id };
+}
+
 // ---------- Conexão (login do Instagram) ----------
 
 export function urlDeAutorizacao(config: ConfigInstagram, redirectUri: string, estado: string): string {

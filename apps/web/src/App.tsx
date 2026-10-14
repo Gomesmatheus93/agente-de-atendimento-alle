@@ -194,7 +194,7 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
           descricao="As respostas dos clientes aos seus disparos, reunidas em um só lugar."
           ampla
         >
-          <Conversas telefone={rota.telefone} numeroId={rota.numeroId} />
+          <Conversas telefone={rota.telefone} numeroId={rota.numeroId} instagramId={rota.instagramId ?? null} />
         </Layout>
       );
     case "relatorios":

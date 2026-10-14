@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { buscarPerfil, cifrar, configInstagram, contasInstagram, ErroInstagram, trocarCodigoPorToken, urlDeAutorizacao } from "@atendimento-academias/db";
+import { ativarDmsInstagram, buscarPerfil, cifrar, configInstagram, contasInstagram, ErroInstagram, trocarCodigoPorToken, urlDeAutorizacao } from "@atendimento-academias/db";
 import { eq } from "drizzle-orm";
 import express, { type Request, type Response, type Router } from "express";
 import { pedirColetaInstagram } from "../queue.js";
@@ -98,6 +98,13 @@ export function criarRotasInstagram(): Router {
         .onConflictDoUpdate({ target: contasInstagram.unidadeId, set: valores })
         .returning({ id: contasInstagram.id });
       pedirColetaInstagram(conta!.id, DIAS_INICIAIS);
+      // Já liga as DMs: a conta passa a mandar as mensagens ao nosso webhook.
+      try {
+        await ativarDmsInstagram(token);
+        await db.update(contasInstagram).set({ dmsAtivadasEm: new Date() }).where(eq(contasInstagram.id, conta!.id));
+      } catch (erro) {
+        console.warn(`[instagram] não foi possível ativar as DMs de @${perfil.username}:`, erro instanceof Error ? erro.message : erro);
+      }
       console.log(`[instagram] @${perfil.username} conectado na unidade ${pendente.unidadeId}`);
       res.redirect("/#/instagram");
     } catch (erro) {
