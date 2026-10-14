@@ -125,28 +125,6 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   );
 }
 
-// Card de destaque no pé do menu (o "baixe o app" do modelo): o atalho mais usado da plataforma.
-function CartaoNovaCampanha({ onNavegar }: { onNavegar?: () => void }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#25083d] via-[#3a0c61] to-[#5b1593] p-4 text-white">
-      <span aria-hidden="true" className="absolute -right-8 -top-10 h-32 w-32 rounded-full border-[14px] border-white/5" />
-      <span aria-hidden="true" className="absolute -bottom-12 -left-6 h-28 w-28 rounded-full border-[10px] border-brand-2/20" />
-      <span aria-hidden="true" className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
-        <Icone nome="enviar" tamanho={15} />
-      </span>
-      <p className="relative mt-3 font-heading text-base font-bold leading-tight">Nova campanha</p>
-      <p className="relative mt-1 text-xs text-white/70">Dispare um template para os seus clientes em minutos.</p>
-      <a
-        href={hrefDe({ tela: "nova-campanha" })}
-        onClick={onNavegar}
-        className="relative mt-3 flex min-h-9 items-center justify-center rounded-full bg-brand-2 text-sm font-semibold text-white transition-colors hover:bg-[#e65c00]"
-      >
-        Criar campanha
-      </a>
-    </div>
-  );
-}
-
 export function iniciais(nome: string): string {
   return nome
     .split(/\s+/)
@@ -299,7 +277,6 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
           <div className="sem-barra -mx-5 min-h-0 flex-1 overflow-y-auto px-5">
             <Menu telaAtiva={telaAtiva} />
           </div>
-          <CartaoNovaCampanha />
         </aside>
       )}
 
@@ -331,7 +308,6 @@ export function Sidebar({ telaAtiva }: { telaAtiva: Tela }) {
             <div className="-mx-3 min-h-0 flex-1 px-5">
               <Menu telaAtiva={telaAtiva} onNavegar={() => setMenuAberto(false)} />
             </div>
-            <CartaoNovaCampanha onNavegar={() => setMenuAberto(false)} />
             <RodapeCelular />
           </div>
         </div>
