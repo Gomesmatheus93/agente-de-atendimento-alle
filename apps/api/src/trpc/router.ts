@@ -1,5 +1,6 @@
 import { router } from "./trpc.js";
 import { authRouter } from "./routers/auth.js";
+import { notasRouter, respostasRapidasRouter } from "./routers/atendimento.js";
 import { calendarioRouter } from "./routers/calendario.js";
 import { campanhasRouter } from "./routers/campanhas.js";
 import { configuracoesRouter } from "./routers/configuracoes.js";
@@ -30,7 +31,9 @@ export const appRouter = router({
   evo: evoRouter,
   funil: funilRouter,
   instagram: instagramRouter,
+  notas: notasRouter,
   relatorios: relatoriosRouter,
+  respostasRapidas: respostasRapidasRouter,
   saude: saudeRouter,
   templates: templatesRouter,
   unidades: unidadesRouter,

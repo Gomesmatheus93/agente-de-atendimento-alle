@@ -119,3 +119,23 @@ export const resolverHumanoInputSchema = z.object({
   telefone: telefoneConversaSchema,
   numeroId: numeroIdSchema,
 });
+
+// Respostas rápidas ("/precos" no chat) e notas internas da equipe.
+export const TAMANHO_MAX_NOTA = 2000;
+
+export const salvarRespostaRapidaInputSchema = z.object({
+  id: z.number().int().positive().optional(),
+  atalho: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((valor) => valor.replace(/^\/+/, ""))
+    .pipe(z.string().min(1, "Dê um atalho").max(30, "Atalho com até 30 caracteres").regex(/^[a-z0-9à-ú_-]+$/, "Atalho sem espaços (use letras, números, - ou _)")),
+  texto: z.string().trim().min(1, "Escreva o texto").max(4000, "Texto com até 4000 caracteres"),
+});
+
+export const criarNotaInputSchema = z.object({
+  telefone: telefoneConversaSchema,
+  numeroId: numeroIdSchema,
+  texto: z.string().trim().min(1, "Escreva a nota").max(TAMANHO_MAX_NOTA, `Nota com até ${TAMANHO_MAX_NOTA} caracteres`),
+});

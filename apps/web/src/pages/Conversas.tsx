@@ -5,11 +5,21 @@ import {
   MIME_DO_ANEXO,
   TAMANHO_MAX_ASSINATURA,
   TAMANHO_MAX_LEGENDA,
+  TAMANHO_MAX_NOTA,
   TAMANHO_MAX_RESPOSTA,
 } from "@atendimento-academias/shared";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CHAVE_BUSCA_CONVERSAS } from "../components/BarraSuperior.js";
+import {
+  BalaoNota,
+  filtrarRespostas,
+  ModalRespostasRapidas,
+  preencherResposta,
+  SugestoesDeResposta,
+  useRespostasRapidas,
+  type Nota,
+} from "../components/Atendimento.js";
 import { EtiquetasDaConversa } from "../components/Etiquetas.js";
 import { SeloDescadastro, SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
@@ -445,7 +455,14 @@ function ConversaAberta({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [naoLidas, telefone, numeroId]);
 
-  const totalDeMensagens = conversa?.mensagens.length ?? 0;
+  // Notas internas entram na linha do tempo junto das mensagens (e nunca vão para o cliente nem para o bot).
+  const notas = trpc.notas.listar.useQuery({ telefone, numeroId }, { refetchInterval: 15_000 }).data ?? [];
+  const excluirNota = trpc.notas.excluir.useMutation({
+    onSuccess: () => void utils.notas.listar.invalidate({ telefone, numeroId }),
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+
+  const totalDeMensagens = (conversa?.mensagens.length ?? 0) + notas.length;
   useEffect(() => {
     const area = rolagemRef.current;
     if (!area || totalDeMensagens === 0) return;
@@ -551,6 +568,9 @@ function ConversaAberta({
       <div ref={rolagemRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <MensagensDaConversa
           mensagens={conversa.mensagens}
+          notas={notas}
+          excluindoNota={excluirNota.isPending ? (excluirNota.variables?.id ?? null) : null}
+          onExcluirNota={(id) => window.confirm("Apagar esta nota interna?") && excluirNota.mutate({ id })}
           reenviandoId={reenviar.isPending ? (reenviar.variables?.id ?? null) : null}
           onReenviar={(id) => reenviar.mutate({ id })}
         />
@@ -584,6 +604,7 @@ function ConversaAberta({
         numeroId={numeroId}
         expiraEm={conversa.janela.expiraEm}
         sugestaoParaEditar={sugestaoParaEditar}
+        nomeCliente={conversa.nome}
         rascunhoInicial={rascunhoInicial}
         onRascunho={onRascunho}
         onEnviada={() => {
@@ -598,30 +619,48 @@ function ConversaAberta({
 
 function MensagensDaConversa({
   mensagens,
+  notas,
   reenviandoId,
   onReenviar,
+  excluindoNota,
+  onExcluirNota,
 }: {
   mensagens: Mensagem[];
+  notas: Nota[];
   reenviandoId: number | null;
   onReenviar: (id: number) => void;
+  excluindoNota: number | null;
+  onExcluirNota: (id: number) => void;
 }) {
   let diaAnterior = "";
+  const itens = [
+    ...mensagens.map((mensagem) => ({ chave: mensagem.id, em: mensagem.em, mensagem, nota: null })),
+    ...notas.map((nota) => ({ chave: `n-${nota.id}`, em: nota.em, mensagem: null, nota })),
+  ].sort((a, b) => a.em.localeCompare(b.em));
 
   return (
     <ol className="mx-auto flex max-w-3xl flex-col gap-2">
-      {mensagens.map((mensagem) => {
-        const dia = new Date(mensagem.em).toDateString();
+      {itens.map((item) => {
+        const dia = new Date(item.em).toDateString();
         const novoDia = dia !== diaAnterior;
         diaAnterior = dia;
 
         return (
-          <li key={mensagem.id} className="flex flex-col gap-2">
+          <li key={item.chave} className="flex flex-col gap-2">
             {novoDia && (
               <p className="my-2 self-center rounded-full bg-slate-200/70 px-3 py-0.5 text-[11px] font-semibold text-ink-2">
-                {rotuloDoDia(mensagem.em)}
+                {rotuloDoDia(item.em)}
               </p>
             )}
-            <Balao mensagem={mensagem} reenviando={mensagem.respostaId !== null && mensagem.respostaId === reenviandoId} onReenviar={onReenviar} />
+            {item.mensagem ? (
+              <Balao
+                mensagem={item.mensagem}
+                reenviando={item.mensagem.respostaId !== null && item.mensagem.respostaId === reenviandoId}
+                onReenviar={onReenviar}
+              />
+            ) : (
+              <BalaoNota nota={item.nota!} excluindo={excluindoNota === item.nota!.id} onExcluir={() => onExcluirNota(item.nota!.id)} />
+            )}
           </li>
         );
       })}
@@ -913,12 +952,21 @@ interface CompositorProps {
   numeroId: number;
   expiraEm: string | null;
   sugestaoParaEditar: { id: number; texto: string; vez: number } | null;
+  // Para o {nome} das respostas rápidas.
+  nomeCliente: string | null;
   rascunhoInicial: string;
   onRascunho: (texto: string) => void;
   onEnviada: () => void;
 }
 
-function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunhoInicial, onRascunho, onEnviada }: CompositorProps) {
+function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, nomeCliente, rascunhoInicial, onRascunho, onEnviada }: CompositorProps) {
+  // "Nota interna": o mesmo rodapé escreve uma anotação que só a equipe vê.
+  const [modoNota, setModoNota] = useState(false);
+  const [gerenciandoRespostas, setGerenciandoRespostas] = useState(false);
+  const respostasRapidas = useRespostasRapidas().data ?? [];
+  const [sugestaoAtiva, setSugestaoAtiva] = useState(0);
+  // Esc fecha a lista de respostas rápidas até o texto mudar.
+  const [listaFechadaEm, setListaFechadaEm] = useState<string | null>(null);
   const [texto, setTexto] = useState(rascunhoInicial);
   // De qual sugestão da IA saiu o texto do campo, para ela ser marcada como usada ao enviar.
   const [sugestaoId, setSugestaoId] = useState<number | null>(null);
@@ -1064,19 +1112,73 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
   const assinatura = useAssinatura();
   const restante = expiraEm ? new Date(expiraEm).getTime() - agora : 0;
 
-  if (restante <= 0) {
+  const janelaAberta = restante > 0;
+  const abas = (
+    <div role="tablist" aria-label="O que escrever" className="flex gap-1 self-start rounded-full bg-surface-2 p-0.5">
+      {(
+        [
+          [false, "Responder ao cliente"],
+          [true, "Nota interna"],
+        ] as const
+      ).map(([nota, rotulo]) => (
+        <button
+          key={rotulo}
+          type="button"
+          role="tab"
+          aria-selected={modoNota === nota}
+          onClick={() => setModoNota(nota)}
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            modoNota === nota ? (nota ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200" : "bg-surface text-ink shadow-card") : "text-ink-2 hover:text-ink"
+          }`}
+        >
+          {nota && <Icone nome="cadeado" tamanho={11} />}
+          {rotulo}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (modoNota) {
     return (
       <footer className="border-t border-card-border bg-surface p-3 sm:p-4">
-        <p role="note" className="mx-auto max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>{expiraEm ? "A janela de 24h se encerrou." : "Este contato ainda não escreveu."}</strong> O WhatsApp só permite texto
-          livre até 24h depois da última mensagem do cliente. Para falar com ele agora, envie um template em{" "}
-          <a href="#/nova-campanha" className="font-semibold underline underline-offset-2">
-            Nova campanha
-          </a>
-          .
-        </p>
+        <div className="mx-auto flex max-w-3xl flex-col gap-2">
+          {abas}
+          <CompositorDeNota telefone={telefone} numeroId={numeroId} />
+        </div>
       </footer>
     );
+  }
+
+  if (!janelaAberta) {
+    return (
+      <footer className="border-t border-card-border bg-surface p-3 sm:p-4">
+        <div className="mx-auto flex max-w-3xl flex-col gap-2">
+          {abas}
+          <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <strong>{expiraEm ? "A janela de 24h se encerrou." : "Este contato ainda não escreveu."}</strong> O WhatsApp só permite texto
+            livre até 24h depois da última mensagem do cliente. Para falar com ele agora, envie um template em{" "}
+            <a href="#/nova-campanha" className="font-semibold underline underline-offset-2">
+              Nova campanha
+            </a>
+            . Notas internas continuam liberadas.
+          </p>
+        </div>
+      </footer>
+    );
+  }
+
+  // "/" no começo do campo abre as respostas rápidas, filtradas pelo que vem depois.
+  const buscaAtalho = /^\/(\S*)$/.exec(texto)?.[1] ?? null;
+  const listaAberta = buscaAtalho !== null && listaFechadaEm !== texto && !anexo;
+  const sugestoesDeResposta = listaAberta ? filtrarRespostas(respostasRapidas, buscaAtalho) : [];
+
+  function escolherResposta(texto: string) {
+    const preenchido = preencherResposta(texto, nomeCliente);
+    setTexto(preenchido);
+    onRascunho(preenchido);
+    setSugestaoId(null);
+    setSugestaoAtiva(0);
+    campoRef.current?.focus();
   }
 
   // A assinatura ("*Nome*" + quebra de linha) ocupa parte do limite de caracteres do WhatsApp.
@@ -1093,6 +1195,24 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
   }
 
   function aoTeclar(evento: KeyboardEvent<HTMLTextAreaElement>) {
+    if (listaAberta) {
+      if (evento.key === "ArrowDown" || evento.key === "ArrowUp") {
+        evento.preventDefault();
+        const total = Math.max(1, sugestoesDeResposta.length);
+        setSugestaoAtiva((atual) => (atual + (evento.key === "ArrowDown" ? 1 : total - 1)) % total);
+        return;
+      }
+      if ((evento.key === "Enter" || evento.key === "Tab") && sugestoesDeResposta.length > 0 && !evento.shiftKey) {
+        evento.preventDefault();
+        escolherResposta(sugestoesDeResposta[Math.min(sugestaoAtiva, sugestoesDeResposta.length - 1)]!.texto);
+        return;
+      }
+      if (evento.key === "Escape") {
+        evento.preventDefault();
+        setListaFechadaEm(texto);
+        return;
+      }
+    }
     // Enter envia; Shift+Enter quebra a linha. Ignora o Enter usado para confirmar acentuação (IME).
     if (evento.key === "Enter" && !evento.shiftKey && !evento.nativeEvent.isComposing) {
       evento.preventDefault();
@@ -1105,7 +1225,9 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
   return (
     <footer className="border-t border-card-border bg-surface p-3 sm:p-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        {abas}
         <Assinatura key={assinatura ?? ""} assinatura={assinatura} />
+        {gerenciandoRespostas && <ModalRespostasRapidas onFechar={() => setGerenciandoRespostas(false)} />}
         {gravando ? (
           <div className="flex h-10 items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3">
             <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-status-falhou" />
@@ -1145,7 +1267,15 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
                 </button>
               </div>
             )}
-            <div className="flex items-end gap-2">
+            <div className="relative flex items-end gap-2">
+              {listaAberta && (
+                <SugestoesDeResposta
+                  respostas={sugestoesDeResposta}
+                  ativa={Math.min(sugestaoAtiva, Math.max(0, sugestoesDeResposta.length - 1))}
+                  onEscolher={(resposta) => escolherResposta(resposta.texto)}
+                  onGerenciar={() => setGerenciandoRespostas(true)}
+                />
+              )}
               <input
                 ref={seletorRef}
                 type="file"
@@ -1166,11 +1296,32 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
               >
                 <Icone nome="clipe" tamanho={16} />
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (respostasRapidas.length === 0) {
+                    setGerenciandoRespostas(true);
+                    return;
+                  }
+                  setTexto("/");
+                  onRascunho("/");
+                  setListaFechadaEm(null);
+                  setSugestaoAtiva(0);
+                  campoRef.current?.focus();
+                }}
+                disabled={!assinatura || Boolean(anexo)}
+                aria-label="Respostas rápidas"
+                title="Respostas rápidas (ou digite /)"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-card-border text-ink-2 transition-colors hover:border-baseline hover:text-ink disabled:opacity-50"
+              >
+                <Icone nome="raio" tamanho={16} />
+              </button>
               <textarea
                 ref={campoRef}
                 value={texto}
                 onChange={(evento) => {
                   setTexto(evento.target.value);
+                  setSugestaoAtiva(0);
                   onRascunho(evento.target.value);
                   // Apagou tudo: o que vier a seguir já não é a sugestão.
                   if (evento.target.value.trim() === "") setSugestaoId(null);
@@ -1206,7 +1357,7 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
         {!gravando && (
           <p className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-ink-3">
             <span>
-              Enter envia · Shift+Enter quebra a linha
+              Enter envia · Shift+Enter quebra a linha · / respostas rápidas
               {enviarAudio.isPending && " · Enviando áudio…"}
             </span>
             <span className={perto ? "font-semibold text-amber-800" : ""}>
@@ -1218,6 +1369,46 @@ function Compositor({ telefone, numeroId, expiraEm, sugestaoParaEditar, rascunho
         )}
       </div>
     </footer>
+  );
+}
+
+// Nota interna: só a equipe vê, e vale mesmo com a janela de 24h fechada.
+function CompositorDeNota({ telefone, numeroId }: { telefone: string; numeroId: number }) {
+  const utils = trpc.useUtils();
+  const [texto, setTexto] = useState("");
+  const criar = trpc.notas.criar.useMutation({
+    onSuccess: () => {
+      setTexto("");
+      void utils.notas.listar.invalidate({ telefone, numeroId });
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+  const podeSalvar = texto.trim() !== "" && texto.length <= TAMANHO_MAX_NOTA && !criar.isPending;
+  const salvar = () => podeSalvar && criar.mutate({ telefone, numeroId, texto });
+
+  return (
+    <div className="flex items-end gap-2">
+      <textarea
+        autoFocus
+        value={texto}
+        onChange={(evento) => setTexto(evento.target.value)}
+        onKeyDown={(evento) => {
+          if (evento.key === "Enter" && !evento.shiftKey && !evento.nativeEvent.isComposing) {
+            evento.preventDefault();
+            salvar();
+          }
+        }}
+        rows={Math.min(6, Math.max(2, texto.split("\n").length))}
+        maxLength={TAMANHO_MAX_NOTA}
+        aria-label="Nota interna"
+        placeholder="Só a equipe vê esta nota. Ex.: pediu desconto, falar com o gerente amanhã."
+        className="min-h-10 flex-1 resize-none !border-amber-200 !bg-amber-50 px-3 py-2 text-sm text-amber-900 placeholder:text-amber-900/50"
+      />
+      <Button onClick={salvar} disabled={!podeSalvar} className="h-10 shrink-0">
+        <Icone nome="cadeado" tamanho={14} />
+        {criar.isPending ? "Salvando…" : "Salvar nota"}
+      </Button>
+    </div>
   );
 }
 

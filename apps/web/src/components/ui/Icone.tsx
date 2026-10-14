@@ -149,6 +149,13 @@ const ICONES = {
     </>
   ),
   upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
+  raio: <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />,
+  cadeado: (
+    <>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
   pulso: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   clipe: <path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,

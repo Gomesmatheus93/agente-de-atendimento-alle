@@ -15,3 +15,4 @@ export * from "./instagram.js";
 export * from "./descadastros.js";
 export * from "./saude.js";
 export * from "./baseContatos.js";
+export * from "./atendimento.js";
