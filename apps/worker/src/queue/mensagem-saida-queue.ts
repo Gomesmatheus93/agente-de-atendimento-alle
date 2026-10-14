@@ -21,13 +21,15 @@ export function createMensagemSaidaWorker(db: Db, providers: FabricaDeProviders)
   );
 }
 
-async function enviarMensagem(db: Db, providers: FabricaDeProviders, mensagemId: number): Promise<void> {
+export async function enviarMensagem(db: Db, providers: FabricaDeProviders, mensagemId: number): Promise<void> {
   const [mensagem] = await db.select().from(mensagensSaida).where(eq(mensagensSaida.id, mensagemId));
 
   // Já enviada (job repetido) ou apagada: nada a fazer.
   if (!mensagem || mensagem.statusEnvio !== "pendente") return;
 
   let resultado: WhatsAppSendResult;
+  // Imagem que não saiu, mas o texto foi sozinho: a mensagem vira texto e guarda o porquê.
+  let imagemFalhou: string | null = null;
   try {
     if (!mensagem.numeroId) throw new NumeroNaoConfigurado("A mensagem não tem número de origem definido.");
     const provider = await providers.para(mensagem.numeroId);
@@ -38,7 +40,16 @@ async function enviarMensagem(db: Db, providers: FabricaDeProviders, mensagemId:
       resultado = await provider.enviarAudio({ telefone: mensagem.telefone, audio, mimeType: mensagem.midiaMimeType });
     } else if (mensagem.tipo === "imagem") {
       if (!mensagem.midiaUrl) throw new Error("Mensagem de imagem sem arquivo gravado.");
-      resultado = await provider.enviarImagem({ telefone: mensagem.telefone, midiaUrl: mensagem.midiaUrl, legenda: mensagem.texto || undefined });
+      resultado = await provider
+        .enviarImagem({ telefone: mensagem.telefone, midiaUrl: mensagem.midiaUrl, legenda: mensagem.texto || undefined })
+        .catch((erro: unknown) => ({ sucesso: false, erro: erro instanceof Error ? erro.message : String(erro) }));
+      // A imagem não saiu (arquivo sumiu, Meta recusou a mídia...). Se havia texto, ele vai sozinho: o
+      // cliente recebe a resposta em vez de não receber nada.
+      if (!resultado.sucesso && mensagem.texto.trim()) {
+        imagemFalhou = resultado.erro ?? "falha desconhecida";
+        console.warn(`[mensagem-saida] imagem da mensagem ${mensagem.id} não foi (${imagemFalhou}); enviando só o texto`);
+        resultado = await provider.enviarTexto({ telefone: mensagem.telefone, texto: mensagem.texto });
+      }
     } else {
       resultado = await provider.enviarTexto({ telefone: mensagem.telefone, texto: mensagem.texto });
     }
@@ -51,7 +62,12 @@ async function enviarMensagem(db: Db, providers: FabricaDeProviders, mensagemId:
     .set({
       statusEnvio: resultado.sucesso ? "enviado" : "falhou",
       tentativas: mensagem.tentativas + 1,
-      erroDetalhe: resultado.sucesso ? null : (resultado.erro ?? "Falha desconhecida"),
+      erroDetalhe: resultado.sucesso
+        ? imagemFalhou
+          ? `A imagem não foi enviada (${imagemFalhou}); o texto foi sozinho.`.slice(0, 1000)
+          : null
+        : (resultado.erro ?? "Falha desconhecida"),
+      ...(resultado.sucesso && imagemFalhou ? { tipo: "texto" as const } : {}),
       mensagemExternaId: resultado.mensagemId ?? null,
       enviadoEm: resultado.sucesso ? new Date() : null,
     })

@@ -699,6 +699,10 @@ function Balao({
         )}
       </p>
 
+      {!falhou && mensagem.erro && (
+        <p className="px-1 text-right text-[11px] text-amber-800">⚠ {mensagem.erro}</p>
+      )}
+
       {falhou && mensagem.respostaId === null && (
         <p role="alert" className="px-1 text-right text-[11px] text-red-700">
           {mensagem.erro ?? "A Meta não entregou esta mensagem."}
