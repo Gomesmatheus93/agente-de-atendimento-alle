@@ -7,7 +7,8 @@ import { criarRotasInstagram } from "./instagram/conexao.js";
 import { criarAvisosDaMeta, paginaExclusao, paginaPrivacidade } from "./instagram/paginasPublicas.js";
 import { ArquivoNaoEncontrado, lerArquivo, nomeDoArquivo } from "@atendimento-academias/db";
 import { cabecalhosDeSeguranca } from "./seguranca.js";
-import { createContext, usuarioDoCookie } from "./trpc/context.js";
+import { iniciarMonitorDeSaude } from "./saude/monitor.js";
+import { createContext, getDb, usuarioDoCookie } from "./trpc/context.js";
 import { appRouter } from "./trpc/router.js";
 import { criarWebhookWhatsapp } from "./webhooks/whatsapp.js";
 
@@ -117,3 +118,5 @@ painel.listen(portaPainel, hostPainel, () => {
 webhook.listen(portaWebhook, () => {
   console.log(`webhook ouvindo na porta ${portaWebhook}`);
 });
+
+iniciarMonitorDeSaude(getDb());

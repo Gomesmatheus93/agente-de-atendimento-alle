@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { hrefDe } from "../lib/route.js";
 import { useTema } from "../lib/tema.js";
 import { trpc } from "../lib/trpc.js";
+import { useProblemasDeSaude } from "../pages/Saude.js";
 import { usePedidosDeHumano } from "./AvisosDeHumano.js";
 import { iniciais } from "./Sidebar.js";
 import { Icone, type NomeIcone } from "./ui/Icone.js";
@@ -40,6 +41,7 @@ export function BarraSuperior() {
   const comUnidade = Boolean(usuario?.unidadeId);
   const naoLidas = trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0;
   const esperando = usePedidosDeHumano().data?.length ?? 0;
+  const problemas = useProblemasDeSaude(comUnidade);
   const sair = trpc.auth.sair.useMutation({ onSettled: () => void utils.invalidate() });
   const [busca, setBusca] = useState("");
   const campo = useRef<HTMLInputElement>(null);
@@ -96,6 +98,14 @@ export function BarraSuperior() {
       <div className="ml-auto flex items-center gap-2">
         {comUnidade && <BotaoRedondo href={conversas} icone="mensagem" rotulo={`Conversas${naoLidas ? ` (${naoLidas} não lidas)` : ""}`} contador={naoLidas} />}
         {comUnidade && <BotaoRedondo href={conversas} icone="sino" rotulo={`Clientes esperando uma pessoa${esperando ? ` (${esperando})` : ""}`} contador={esperando} />}
+        {comUnidade && problemas.total > 0 && (
+          <BotaoRedondo
+            href={hrefDe({ tela: "saude" })}
+            icone="alerta"
+            rotulo={`Saúde do sistema: ${problemas.falhas ? `${problemas.falhas} falha(s)` : `${problemas.atencoes} ponto(s) de atenção`}`}
+            contador={problemas.total}
+          />
+        )}
         <BotaoRedondo icone={tema === "claro" ? "lua" : "sol"} rotulo={tema === "claro" ? "Usar tema escuro" : "Usar tema claro"} onClick={alternar} />
 
         <div className="ml-2 flex items-center gap-3 border-l border-card-border pl-4">

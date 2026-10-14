@@ -1,5 +1,5 @@
 import type { Worker } from "bullmq";
-import { createDbClient } from "@atendimento-academias/db";
+import { configuracoes, createDbClient } from "@atendimento-academias/db";
 import { createDisparoWorker } from "./queue/disparo-queue.js";
 import { createMensagemSaidaWorker } from "./queue/mensagem-saida-queue.js";
 import { createIaSugestaoWorker } from "./queue/ia-sugestao-queue.js";
@@ -48,5 +48,20 @@ for (const { nome, worker } of workers) {
 }
 
 iniciarAgendadorDeCampanhas(db);
+
+// Batimento: a tela de saúde do sistema avisa quando o worker para de bater (campanhas e respostas param
+// de sair). Só em produção — o worker do computador de desenvolvimento usa o mesmo banco e esconderia
+// um worker de produção parado.
+const CHAVE_BATIMENTO = "worker.batimento";
+function baterCoracao(): void {
+  db.insert(configuracoes)
+    .values({ unidadeId: null, chave: CHAVE_BATIMENTO, valor: new Date().toISOString() })
+    .onConflictDoUpdate({ target: [configuracoes.unidadeId, configuracoes.chave], set: { valor: new Date().toISOString() } })
+    .catch((erro: unknown) => console.error("[worker] não foi possível registrar o batimento:", erro));
+}
+if (process.env.NODE_ENV === "production") {
+  baterCoracao();
+  setInterval(baterCoracao, 60_000).unref();
+}
 
 console.log(`[worker] escutando filas ${workers.map(({ nome }) => nome).join(", ")}; agendador de campanhas ativo...`);

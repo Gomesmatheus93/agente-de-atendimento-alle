@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadBucketCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // Onde ficam os arquivos (áudios, figurinhas, imagens e documentos recebidos e enviados, imagens de template
 // e do agente). Com S3_BUCKET configurado, num bucket da AWS — sobrevive a cada nova versão do servidor e
@@ -127,4 +127,12 @@ export async function lerArquivo(urlOuNome: string): Promise<{ buffer: Buffer; m
   } catch {
     throw new ArquivoNaoEncontrado(`Arquivo ${nome} não encontrado`);
   }
+}
+
+// Para a tela de saúde: o bucket responde com estas credenciais? Sem S3 configurado, devolve null.
+export async function verificarArmazenamento(): Promise<string | null> {
+  const s3 = clienteS3();
+  if (!s3) return null;
+  await s3.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET!.trim() }), { abortSignal: AbortSignal.timeout(10_000) });
+  return process.env.S3_BUCKET!.trim();
 }

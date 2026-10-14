@@ -4,6 +4,7 @@ import { hrefDe, type Rota } from "../lib/route.js";
 import { useTema } from "../lib/tema.js";
 import { trpc } from "../lib/trpc.js";
 import { usePedidosDeHumano } from "./AvisosDeHumano.js";
+import { useProblemasDeSaude } from "../pages/Saude.js";
 import { Icone, type NomeIcone } from "./ui/Icone.js";
 
 type Tela = Rota["tela"];
@@ -43,6 +44,7 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
       { tela: "templates", label: "Templates", href: hrefDe({ tela: "templates", criarNaConta: null }), icone: "documento" },
       { tela: "configuracoes", label: "Configurações", href: hrefDe({ tela: "configuracoes" }), icone: "engrenagem", soAdmin: true },
       { tela: "usuarios", label: "Equipe", href: hrefDe({ tela: "usuarios" }), icone: "usuarios", soAdmin: true },
+      { tela: "saude", label: "Saúde do sistema", href: hrefDe({ tela: "saude" }), icone: "pulso" },
       { tela: "unidades", label: "Unidades", href: hrefDe({ tela: "unidades" }), icone: "predio", soSuperadmin: true },
     ],
   },
@@ -69,6 +71,7 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   const ehSuperadmin = papel === "superadmin";
   const ehAdmin = papel === "admin" || ehSuperadmin;
   const precisamDeHumano = usePedidosDeHumano().data?.length ?? 0;
+  const problemas = useProblemasDeSaude(comUnidade);
 
   // Sem unidade escolhida, o superadmin só tem a tela Unidades.
   const grupos = GRUPOS.map((grupo) => ({
@@ -106,6 +109,16 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
                     className="ml-auto inline-flex h-5 min-w-5 items-center justify-center gap-0.5 rounded-md bg-amber-400 px-1 text-[10px] font-bold text-amber-950"
                   >
                     🙋{precisamDeHumano}
+                  </span>
+                )}
+                {item.tela === "saude" && problemas.total > 0 && (
+                  <span
+                    aria-label={`${problemas.total} problema${problemas.total > 1 ? "s" : ""} no sistema`}
+                    className={`ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1.5 text-[10px] font-bold ${
+                      problemas.falhas > 0 ? "bg-[#b42318] text-white" : "bg-amber-400 text-amber-950"
+                    }`}
+                  >
+                    {problemas.total}
                   </span>
                 )}
                 {item.tela === "conversas" && naoLidas > 0 && (

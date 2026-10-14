@@ -36,6 +36,18 @@ function criarFila<T>(nome: string): Queue<T> {
   });
 }
 
+// Para a tela de saúde: o Redis responde? Conexão própria, que não tenta de novo (falha rápido).
+let conexaoDeTeste: Redis | undefined;
+export async function pingRedis(): Promise<void> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) throw new Error("REDIS_URL não configurada");
+  conexaoDeTeste ??= new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 5000, lazyConnect: true });
+  await Promise.race([
+    conexaoDeTeste.ping(),
+    new Promise((_, rejeitar) => setTimeout(() => rejeitar(new Error("sem resposta em 5s")), 5000).unref()),
+  ]);
+}
+
 let disparoQueue: Queue<DisparoEnvioJobData> | undefined;
 let mensagemSaidaQueue: Queue<MensagemSaidaJobData> | undefined;
 

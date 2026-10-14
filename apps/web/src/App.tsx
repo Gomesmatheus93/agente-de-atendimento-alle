@@ -18,6 +18,7 @@ import { Relatorios } from "./pages/Relatorios.js";
 import { NovoTemplate } from "./pages/NovoTemplate.js";
 import { Templates } from "./pages/Templates.js";
 import { VisaoGeral } from "./pages/VisaoGeral.js";
+import { Saude } from "./pages/Saude.js";
 
 export function App() {
   const utils = trpc.useUtils();
@@ -203,6 +204,12 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
           descricao="Desempenho das campanhas: quantos clientes responderam e quanto cada resposta custou."
         >
           <Relatorios />
+        </Layout>
+      );
+    case "saude":
+      return (
+        <Layout telaAtiva="saude" titulo="Saúde do sistema" descricao="Tudo de que o atendimento depende, conferido a cada 5 minutos.">
+          <Saude />
         </Layout>
       );
     case "duvidas":

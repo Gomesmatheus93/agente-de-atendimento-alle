@@ -11,6 +11,7 @@ import { evoRouter } from "./routers/evo.js";
 import { funilRouter } from "./routers/funil.js";
 import { instagramRouter } from "./routers/instagram.js";
 import { relatoriosRouter } from "./routers/relatorios.js";
+import { saudeRouter } from "./routers/saude.js";
 import { templatesRouter } from "./routers/templates.js";
 import { unidadesRouter } from "./routers/unidades.js";
 import { usuariosRouter } from "./routers/usuarios.js";
@@ -28,6 +29,7 @@ export const appRouter = router({
   funil: funilRouter,
   instagram: instagramRouter,
   relatorios: relatoriosRouter,
+  saude: saudeRouter,
   templates: templatesRouter,
   unidades: unidadesRouter,
   usuarios: usuariosRouter,
