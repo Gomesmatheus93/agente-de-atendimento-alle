@@ -16,6 +16,8 @@ export const funilClientes = pgTable(
     etapa: etapaFunilEnum("etapa").notNull().default("em_conversa"),
     // "manual": alguém da equipe moveu o card, e a análise da IA não muda mais a etapa (só o resumo).
     etapaOrigem: etapaOrigemEnum("etapa_origem").notNull().default("ia"),
+    // Quando o card chegou na etapa atual: é o que conta "matrículas no período" no painel do dono.
+    etapaDesde: timestamp("etapa_desde", { withTimezone: true }).notNull().defaultNow(),
     motivoPerda: motivoPerdaEnum("motivo_perda"),
     motivoDetalhe: varchar("motivo_detalhe", { length: 500 }),
     // Escritos pela análise da IA.
@@ -26,7 +28,10 @@ export const funilClientes = pgTable(
     ultimaMensagemAnalisada: timestamp("ultima_mensagem_analisada", { withTimezone: true }),
     ...timestamps(),
   },
-  (tabela) => [uniqueIndex("funil_clientes_conversa").on(tabela.numeroId, tabela.telefone)],
+  (tabela) => [
+    uniqueIndex("funil_clientes_conversa").on(tabela.numeroId, tabela.telefone),
+    index("funil_clientes_etapa_desde").on(tabela.etapa, tabela.etapaDesde),
+  ],
 );
 
 // Perguntas que os clientes fizeram, extraídas pela análise da IA e agrupadas por tema: alimentam o

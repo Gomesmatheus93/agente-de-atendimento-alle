@@ -71,6 +71,13 @@
       "when": 1791377472560,
       "tag": "0009_instagram",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791982637005,
+      "tag": "0010_funil_etapa_desde",
+      "breakpoints": true
     }
   ]
 }

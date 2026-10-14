@@ -4,6 +4,7 @@ import {
   conversasExcluidas,
   doNumeroDaUnidade,
   duvidasIa,
+  etapaDesdeAoAtualizar,
   funilClientes,
   mensagensSaida,
   numerosWhatsapp,
@@ -131,7 +132,10 @@ async function analisarConversa(
   await db
     .insert(funilClientes)
     .values({ numeroId: conversa.numeroId, telefone: conversa.telefone, ...analise, ...etapa })
-    .onConflictDoUpdate({ target: [funilClientes.numeroId, funilClientes.telefone], set: { ...analise, ...etapa } });
+    .onConflictDoUpdate({
+      target: [funilClientes.numeroId, funilClientes.telefone],
+      set: { ...analise, ...etapa, ...(manual ? {} : { etapaDesde: etapaDesdeAoAtualizar }) },
+    });
 
   await db
     .delete(duvidasIa)

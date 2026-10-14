@@ -73,7 +73,7 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
         <Layout
           telaAtiva="visao-geral"
           titulo="Visão geral"
-          descricao="Acompanhe disparos, conversas e matrículas da unidade num só lugar."
+          descricao="Como a unidade está vendendo: matrículas, atendimento e o que trava as vendas."
           acoes={
             <>
               <a

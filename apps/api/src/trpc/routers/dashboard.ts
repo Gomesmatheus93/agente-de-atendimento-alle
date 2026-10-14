@@ -2,6 +2,8 @@ import {
   campanhasDisparo,
   conversasConfig,
   doNumeroDaUnidade,
+  duvidasIa,
+  funilClientes,
   disparoDestinatarios,
   mensagensSaida,
   respostasClientes,
@@ -9,7 +11,7 @@ import {
   templatesWhatsapp,
 } from "@atendimento-academias/db";
 import { resumoVisaoInputSchema, type ResumoVisaoInput } from "@atendimento-academias/shared";
-import { and, asc, count, countDistinct, desc, eq, gte, inArray, isNull, lt, max, min, ne } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, gte, inArray, isNull, lt, max, min, ne, sql } from "drizzle-orm";
 import { chaveDia, diasEntre, inicioDoDia, somarDias } from "../periodo.js";
 import { carregarProgresso, carregarRespondentes, progressoVazio, taxa, type ProgressoPorStatus } from "../progresso.js";
 import { procedimentoUnidade, router } from "../trpc.js";
@@ -83,7 +85,166 @@ function somar(alvo: Totais, progresso: ProgressoPorStatus) {
   alvo.taxaSucesso = finalizados > 0 ? alvo.enviado / finalizados : null;
 }
 
+const MAX_TOPICOS_DONO = 3;
+
+// Conversas em que a última mensagem é do cliente e ninguém respondeu: quantas, e quantas com a janela de
+// 24h acabando (depois dela, só template alcança o cliente).
+async function conversasSemResposta(db: Parameters<typeof carregarProgresso>[0], unidadeId: number, agora: number) {
+  const [ultimasDoCliente, ultimasSaidas, ultimosDisparos] = await Promise.all([
+    db
+      .select({ telefone: respostasClientes.telefone, numeroId: respostasClientes.numeroId, em: max(respostasClientes.recebidaEm) })
+      .from(respostasClientes)
+      .where(and(doNumeroDaUnidade(respostasClientes.numeroId, unidadeId), gte(respostasClientes.recebidaEm, new Date(agora - JANELA_RESPOSTA_MS))))
+      .groupBy(respostasClientes.telefone, respostasClientes.numeroId),
+    db
+      .select({ telefone: mensagensSaida.telefone, numeroId: mensagensSaida.numeroId, em: max(mensagensSaida.createdAt) })
+      .from(mensagensSaida)
+      .where(and(doNumeroDaUnidade(mensagensSaida.numeroId, unidadeId), gte(mensagensSaida.createdAt, new Date(agora - JANELA_RESPOSTA_MS))))
+      .groupBy(mensagensSaida.telefone, mensagensSaida.numeroId),
+    db
+      .select({ telefone: disparoDestinatarios.telefone, numeroId: campanhasDisparo.numeroId, em: max(disparoDestinatarios.enviadoEm) })
+      .from(disparoDestinatarios)
+      .innerJoin(campanhasDisparo, eq(campanhasDisparo.id, disparoDestinatarios.campanhaId))
+      .where(and(eq(campanhasDisparo.unidadeId, unidadeId), gte(disparoDestinatarios.enviadoEm, new Date(agora - JANELA_RESPOSTA_MS))))
+      .groupBy(disparoDestinatarios.telefone, campanhasDisparo.numeroId),
+  ]);
+  const chave = (numeroId: number | null, telefone: string) => `${numeroId ?? 0}|${telefone}`;
+  const ultimaNossa = new Map<string, number>();
+  for (const linha of [...ultimasSaidas, ...ultimosDisparos]) {
+    if (!linha.em) continue;
+    const quando = new Date(linha.em as unknown as string | Date).getTime();
+    if (quando > (ultimaNossa.get(chave(linha.numeroId, linha.telefone)) ?? 0)) ultimaNossa.set(chave(linha.numeroId, linha.telefone), quando);
+  }
+  let aguardando = 0;
+  let acabando = 0;
+  for (const linha of ultimasDoCliente) {
+    if (!linha.em) continue;
+    const quando = new Date(linha.em as unknown as string | Date).getTime();
+    if ((ultimaNossa.get(chave(linha.numeroId, linha.telefone)) ?? 0) > quando) continue;
+    aguardando += 1;
+    if (quando + JANELA_RESPOSTA_MS - agora < LIMIAR_ACABANDO_MS) acabando += 1;
+  }
+  return { aguardando, acabando };
+}
+
 export const dashboardRouter = router({
+  // Painel do dono da unidade: só o que responde "estamos vendendo?" — matrículas, clientes atendidos,
+  // conversão, custo por matrícula, onde estão os clientes, por que não fecham, o que perguntam — e se tem
+  // alguém esperando agora.
+  dono: procedimentoUnidade.input(resumoVisaoInputSchema).query(async ({ ctx, input }) => {
+    const agora = Date.now();
+    const hoje = chaveDia(new Date(agora));
+    const [primeira] =
+      input.periodo === "tudo"
+        ? await ctx.db
+            .select({ em: min(respostasClientes.recebidaEm) })
+            .from(respostasClientes)
+            .where(doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId))
+        : [{ em: null }];
+    const periodo = resolverPeriodo(input, hoje, primeira?.em ? chaveDia(new Date(primeira.em)) : null);
+    const inicioAtual = inicioDoDia(periodo.inicio);
+    const inicioAnterior = inicioDoDia(periodo.anterior[0] ?? periodo.inicio);
+    const ate = inicioDoDia(somarDias(periodo.fim, 1));
+    const porMes = periodo.atual.length > MAX_DIAS_POR_DIA;
+    const ponto = (dia: string) => (porMes ? dia.slice(0, 7) : dia);
+    const naUnidade = doNumeroDaUnidade(funilClientes.numeroId, ctx.unidadeId);
+
+    const [fechamentos, atendidos, etapas, motivos, duvidas, campanhas, [humanos], semResposta] = await Promise.all([
+      ctx.db
+        .select({ em: funilClientes.etapaDesde })
+        .from(funilClientes)
+        .where(and(naUnidade, eq(funilClientes.etapa, "fechou"), gte(funilClientes.etapaDesde, inicioAnterior), lt(funilClientes.etapaDesde, ate))),
+      // Clientes que escreveram no período (cada conversa conta uma vez), atual e anterior.
+      ctx.db
+        .select({
+          atual: sql<number>`count(distinct (${respostasClientes.numeroId}, ${respostasClientes.telefone})) filter (where ${respostasClientes.recebidaEm} >= ${inicioAtual.toISOString()}::timestamptz)`.mapWith(Number),
+          anterior: sql<number>`count(distinct (${respostasClientes.numeroId}, ${respostasClientes.telefone})) filter (where ${respostasClientes.recebidaEm} < ${inicioAtual.toISOString()}::timestamptz)`.mapWith(Number),
+        })
+        .from(respostasClientes)
+        .where(and(doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId), gte(respostasClientes.recebidaEm, inicioAnterior), lt(respostasClientes.recebidaEm, ate))),
+      ctx.db.select({ etapa: funilClientes.etapa, total: count() }).from(funilClientes).where(naUnidade).groupBy(funilClientes.etapa),
+      ctx.db
+        .select({ motivo: funilClientes.motivoPerda, total: count() })
+        .from(funilClientes)
+        .where(and(naUnidade, eq(funilClientes.etapa, "nao_fechou"), gte(funilClientes.etapaDesde, inicioAtual), lt(funilClientes.etapaDesde, ate)))
+        .groupBy(funilClientes.motivoPerda)
+        .orderBy(desc(count()))
+        .limit(MAX_TOPICOS_DONO),
+      ctx.db
+        .select({ tema: duvidasIa.tema, total: count(), semResposta: sql<number>`count(*) filter (where not ${duvidasIa.sanada})`.mapWith(Number) })
+        .from(duvidasIa)
+        .where(and(doNumeroDaUnidade(duvidasIa.numeroId, ctx.unidadeId), gte(duvidasIa.perguntadaEm, inicioAtual), lt(duvidasIa.perguntadaEm, ate)))
+        .groupBy(duvidasIa.tema)
+        .orderBy(desc(count()))
+        .limit(MAX_TOPICOS_DONO),
+      ctx.db
+        .select({ id: campanhasDisparo.id, em: campanhasDisparo.disparoEm, custoUnitario: campanhasDisparo.custoUnitario })
+        .from(campanhasDisparo)
+        .where(and(eq(campanhasDisparo.unidadeId, ctx.unidadeId), ne(campanhasDisparo.status, "agendada"), gte(campanhasDisparo.disparoEm, inicioAnterior), lt(campanhasDisparo.disparoEm, ate))),
+      ctx.db
+        .select({ total: count() })
+        .from(conversasConfig)
+        .where(and(eq(conversasConfig.precisaHumano, true), doNumeroDaUnidade(conversasConfig.numeroId, ctx.unidadeId))),
+      conversasSemResposta(ctx.db, ctx.unidadeId, agora),
+    ]);
+
+    // Matrículas por dia (ou mês) do período, e o total do anterior para comparar.
+    const serie = new Map([...new Set(periodo.atual.map(ponto))].map((chave) => [chave, 0]));
+    let matriculas = 0;
+    let matriculasAntes = 0;
+    for (const { em } of fechamentos) {
+      if (em >= inicioAtual) {
+        matriculas += 1;
+        const chave = ponto(chaveDia(em));
+        serie.set(chave, (serie.get(chave) ?? 0) + 1);
+      } else matriculasAntes += 1;
+    }
+
+    // Custo dos disparos (o que a Meta cobra): preço congelado na campanha × mensagens que saíram.
+    const progresso = await carregarProgresso(ctx.db, campanhas.map((campanha) => campanha.id));
+    let custo = 0;
+    let custoAntes = 0;
+    for (const campanha of campanhas) {
+      const valor = Number(campanha.custoUnitario ?? 0) * (progresso.get(campanha.id)?.enviado ?? 0);
+      if (campanha.em >= inicioAtual) custo += valor;
+      else custoAntes += valor;
+    }
+
+    const porEtapa = Object.fromEntries(etapas.map((linha) => [linha.etapa, linha.total])) as Partial<Record<string, number>>;
+    const fechou = porEtapa.fechou ?? 0;
+    const naoFechou = porEtapa.nao_fechou ?? 0;
+    const atendidosAtual = atendidos[0]?.atual ?? 0;
+    const atendidosAntes = atendidos[0]?.anterior ?? 0;
+    const comparar = periodo.comparacao !== null;
+
+    return {
+      periodo: { comparacao: periodo.comparacao, agrupamento: porMes ? ("mes" as const) : ("dia" as const) },
+      matriculas: { atual: matriculas, anterior: comparar ? matriculasAntes : null },
+      atendidos: { atual: atendidosAtual, anterior: comparar ? atendidosAntes : null },
+      conversao: {
+        atual: atendidosAtual > 0 ? matriculas / atendidosAtual : null,
+        anterior: comparar && atendidosAntes > 0 ? matriculasAntes / atendidosAntes : null,
+      },
+      custoPorMatricula: {
+        atual: matriculas > 0 ? custo / matriculas : null,
+        anterior: comparar && matriculasAntes > 0 ? custoAntes / matriculasAntes : null,
+        custoTotal: custo,
+      },
+      serie: [...serie.entries()].map(([dia, valor]) => ({ dia, matriculas: valor })),
+      // O funil é a foto de agora (todos os clientes), não só do período.
+      funil: {
+        fechou,
+        emAndamento: (porEtapa.em_conversa ?? 0) + (porEtapa.interessado ?? 0) + (porEtapa.fechando ?? 0),
+        quaseFechando: porEtapa.fechando ?? 0,
+        naoFechou,
+        taxaFechamento: fechou + naoFechou > 0 ? fechou / (fechou + naoFechou) : null,
+      },
+      motivosPerda: motivos.map((linha) => ({ motivo: linha.motivo ?? "outro", total: linha.total })),
+      duvidas: duvidas,
+      agora: { precisaHumano: humanos?.total ?? 0, ...semResposta },
+    };
+  }),
+
   resumo: procedimentoUnidade.input(resumoVisaoInputSchema).query(async ({ ctx, input }) => {
     const agora = Date.now();
     const hoje = chaveDia(new Date(agora));

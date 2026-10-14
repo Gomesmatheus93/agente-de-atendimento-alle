@@ -4,6 +4,7 @@ import {
   conversasConfig,
   conversasExcluidas,
   doNumeroDaUnidade,
+  etapaDesdeAoAtualizar,
   funilClientes,
   respostasClientes,
 } from "@atendimento-academias/db";
@@ -117,7 +118,7 @@ export const funilRouter = router({
     await ctx.db
       .insert(funilClientes)
       .values({ numeroId: input.numeroId, telefone: input.telefone, ...valores })
-      .onConflictDoUpdate({ target: [funilClientes.numeroId, funilClientes.telefone],  set: valores });
+      .onConflictDoUpdate({ target: [funilClientes.numeroId, funilClientes.telefone], set: { ...valores, etapaDesde: etapaDesdeAoAtualizar } });
     return { ok: true };
   }),
 
