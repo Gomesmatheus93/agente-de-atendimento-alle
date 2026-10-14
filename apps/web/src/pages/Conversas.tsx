@@ -2,7 +2,7 @@ import { JANELA_RESPOSTA_MS, TAMANHO_MAX_ASSINATURA, TAMANHO_MAX_RESPOSTA } from
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CHAVE_BUSCA_CONVERSAS } from "../components/BarraSuperior.js";
-import { SeloEvo } from "../components/Evo.js";
+import { SeloDescadastro, SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
 import { Icone } from "../components/ui/Icone.js";
@@ -502,6 +502,7 @@ function ConversaAberta({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SeloEvo telefone={telefone} numeroId={numeroId} nome={conversa.nome} />
+          <SeloDescadastro telefone={telefone} numeroId={numeroId} />
           <IndicadorDaJanela expiraEm={conversa.janela.expiraEm} />
           <button
             type="button"

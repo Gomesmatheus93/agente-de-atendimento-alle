@@ -137,9 +137,14 @@ export function NovaCampanha() {
       setRascunho(RASCUNHO_VAZIO);
       toast.sucesso(
         campanha.agendada && variaveis.agendarPara
-          ? `Campanha "${variaveis.nome.trim()}" agendada para ${formatarQuando(variaveis.agendarPara)}, para ${formatarNumero(variaveis.destinatarios.length)} número(s).`
-          : `Campanha "${variaveis.nome.trim()}" criada. Disparando para ${formatarNumero(variaveis.destinatarios.length)} número(s).`,
+          ? `Campanha "${variaveis.nome.trim()}" agendada para ${formatarQuando(variaveis.agendarPara)}, para ${formatarNumero(variaveis.destinatarios.length - campanha.descadastrados)} número(s).`
+          : `Campanha "${variaveis.nome.trim()}" criada. Disparando para ${formatarNumero(variaveis.destinatarios.length - campanha.descadastrados)} número(s).`,
       );
+      if (campanha.descadastrados > 0) {
+        toast.sucesso(
+          `${formatarNumero(campanha.descadastrados)} número(s) ficaram de fora porque pediram para não receber campanhas.`,
+        );
+      }
       await Promise.all([
         utils.campanhas.listar.invalidate(),
         utils.dashboard.resumo.invalidate(),

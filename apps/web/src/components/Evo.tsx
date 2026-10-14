@@ -182,3 +182,49 @@ export function ConfiguracaoEvo() {
     </Card>
   );
 }
+
+// Lista de "não quero receber campanhas": selo quando o cliente está nela, e o botão para a equipe
+// bloquear (pediu por outro canal) ou liberar (pediu para voltar).
+export function SeloDescadastro({ telefone, numeroId }: { telefone: string; numeroId: number }) {
+  const utils = trpc.useUtils();
+  const situacao = trpc.descadastros.situacao.useQuery({ telefone, numeroId }, { staleTime: 60_000 });
+  const definir = trpc.descadastros.definir.useMutation({
+    onSuccess: (resultado) => {
+      toast.sucesso(resultado.bloqueado ? "Este cliente não vai mais receber campanhas." : "Cliente liberado para receber campanhas.");
+      void utils.descadastros.invalidate();
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+  });
+  if (!situacao.data) return null;
+  if (situacao.data.bloqueado) {
+    const origem = { cliente: "o cliente pediu", equipe: "bloqueado pela equipe", meta: "o cliente parou de aceitar marketing no WhatsApp" }[situacao.data.origem];
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (window.confirm("Liberar este cliente para voltar a receber campanhas? Só faça isso se ele pediu.")) definir.mutate({ telefone, numeroId, bloqueado: false });
+        }}
+        disabled={definir.isPending}
+        title={`Fora das campanhas: ${origem}. Clique para liberar.`}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-red-50 px-2.5 text-xs font-semibold text-red-700"
+      >
+        <Icone nome="proibido" tamanho={13} />
+        Não recebe campanhas
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (window.confirm("Tirar este cliente das campanhas? Ele continua podendo conversar com a unidade.")) definir.mutate({ telefone, numeroId, bloqueado: true });
+      }}
+      disabled={definir.isPending}
+      aria-label="Não enviar campanhas para este cliente"
+      title="Não enviar campanhas para este cliente"
+      className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-red-50 hover:text-red-700"
+    >
+      <Icone nome="proibido" tamanho={16} />
+    </button>
+  );
+}

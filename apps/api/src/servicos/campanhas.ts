@@ -1,4 +1,11 @@
-import { campanhasDisparo, disparoDestinatarios, numerosWhatsapp, templatesWhatsapp, type Db } from "@atendimento-academias/db";
+import {
+  campanhasDisparo,
+  disparoDestinatarios,
+  numerosWhatsapp,
+  telefonesDescadastrados,
+  templatesWhatsapp,
+  type Db,
+} from "@atendimento-academias/db";
 import {
   ANTECEDENCIA_MAX_AGENDAMENTO_MS,
   ANTECEDENCIA_MIN_AGENDAMENTO_MS,
@@ -15,7 +22,11 @@ import { getDisparoQueue } from "../queue.js";
 // Lógica de criar campanha: usada pela tela (tRPC, com sessão) e pela API de integração (chave, sem
 // sessão) — as duas caem exatamente nas mesmas regras e no mesmo caminho de envio, não há um "modo
 // simplificado" para automação externa.
-export async function criarCampanha(db: Db, input: CriarCampanhaInput, unidadeId: number): Promise<{ id: number; agendada: boolean }> {
+export async function criarCampanha(
+  db: Db,
+  input: CriarCampanhaInput,
+  unidadeId: number,
+): Promise<{ id: number; agendada: boolean; descadastrados: number }> {
   const [template] = await db
     .select()
     .from(templatesWhatsapp)
@@ -47,11 +58,22 @@ export async function criarCampanha(db: Db, input: CriarCampanhaInput, unidadeId
     });
   }
 
+  // Quem pediu para não receber campanhas da unidade fica de fora (opt-out): a lista vem de "sair" no
+  // WhatsApp, do painel ou do aviso da Meta.
+  const bloqueados = await telefonesDescadastrados(db, unidadeId, input.destinatarios.map((destinatario) => destinatario.telefone));
+  const permitidos = input.destinatarios.filter((destinatario) => !bloqueados.has(destinatario.telefone));
+  if (permitidos.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Todos os destinatários pediram para não receber campanhas desta unidade.",
+    });
+  }
+
   const placeholders = extrairPlaceholders(template.conteudo);
 
   // Cada destinatário tem os próprios valores, então a validação é linha a linha: a Meta recusa
   // o template inteiro se algum parâmetro chegar vazio.
-  const linhas = input.destinatarios.map((destinatario) => {
+  const linhas = permitidos.map((destinatario) => {
     const faltando = placeholders.filter((nome) => !destinatario.parametros[nome]?.trim());
     if (faltando.length > 0) {
       throw new TRPCError({
@@ -96,7 +118,7 @@ export async function criarCampanha(db: Db, input: CriarCampanhaInput, unidadeId
     return id;
   });
 
-  if (disparoAgendado) return { id: campanhaId, agendada: true };
+  if (disparoAgendado) return { id: campanhaId, agendada: true, descadastrados: bloqueados.size };
 
   const destinatarios = await db
     .select({ id: disparoDestinatarios.id })
@@ -121,5 +143,5 @@ export async function criarCampanha(db: Db, input: CriarCampanhaInput, unidadeId
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível enfileirar os envios", cause });
   }
 
-  return { id: campanhaId, agendada: false };
+  return { id: campanhaId, agendada: false, descadastrados: bloqueados.size };
 }

@@ -6,3 +6,4 @@ export * from "./conversas.js";
 export * from "./unidade.js";
 export * from "./instagram.js";
 export * from "./armazenamento.js";
+export * from "./descadastro.js";

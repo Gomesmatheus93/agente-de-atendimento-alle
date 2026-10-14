@@ -5,6 +5,7 @@ import { campanhasRouter } from "./routers/campanhas.js";
 import { configuracoesRouter } from "./routers/configuracoes.js";
 import { conversasRouter } from "./routers/conversas.js";
 import { dashboardRouter } from "./routers/dashboard.js";
+import { descadastrosRouter } from "./routers/descadastros.js";
 import { duvidasRouter } from "./routers/duvidas.js";
 import { evoRouter } from "./routers/evo.js";
 import { funilRouter } from "./routers/funil.js";
@@ -21,6 +22,7 @@ export const appRouter = router({
   configuracoes: configuracoesRouter,
   conversas: conversasRouter,
   dashboard: dashboardRouter,
+  descadastros: descadastrosRouter,
   duvidas: duvidasRouter,
   evo: evoRouter,
   funil: funilRouter,

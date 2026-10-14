@@ -6,6 +6,10 @@ import {
   disparoDestinatarios,
   mensagensSaida,
   respostasClientes,
+  descadastrar,
+  pedidoDeDescadastro,
+  recadastrar,
+  situacaoDeDescadastro,
   templatesWhatsapp,
   contasWhatsapp,
   type Db,
@@ -26,6 +30,7 @@ import {
 import { baixarMidia } from "../meta/graph.js";
 import { salvarBuffer } from "../media/armazenamento.js";
 import { pedirAnaliseDaConversa, pedirSugestaoIa } from "../queue.js";
+import { enviarMensagem } from "../servicos/conversas.js";
 import { getDb } from "../trpc/context.js";
 
 // Uma resposta só é atribuída a uma campanha se chegou até esse tempo depois do envio.
@@ -349,7 +354,31 @@ function descreverFalha(situacao: Situacao): string {
 // Os "checks" do WhatsApp: a Meta avisa quando a mensagem chegou no aparelho (delivered), quando o cliente
 // abriu (read) e quando não conseguiu entregar (failed). Vale para respostas pelo painel/bot e para os
 // disparos de campanha; só mexe em mensagens do número que recebeu o evento. Devolve quantas achou.
-async function registrarSituacaoDeEntrega(db: Db, numeroId: number, situacao: Situacao): Promise<number> {
+// Confirmações que o cliente recebe ao pedir para sair ou voltar (dentro da janela de 24h, texto livre).
+const CONFIRMA_SAIDA =
+  "Pronto! Você não vai mais receber nossas mensagens promocionais. Se mudar de ideia, é só responder VOLTAR. 💜";
+const CONFIRMA_VOLTA = "Combinado! Você volta a receber nossas novidades. 💜";
+
+async function tratarPedidoDeDescadastro(db: Db, unidadeId: number, telefone: string, numeroId: number, texto: string): Promise<boolean> {
+  const pedido = pedidoDeDescadastro(texto);
+  if (!pedido) return false;
+  if (pedido === "voltar") {
+    // "voltar" de quem nunca saiu é só uma mensagem: segue para o atendimento normal.
+    if (!(await situacaoDeDescadastro(db, unidadeId, telefone))) return false;
+    await recadastrar(db, unidadeId, telefone);
+  } else {
+    await descadastrar(db, unidadeId, telefone, "cliente", texto);
+  }
+  console.log(`[webhook-whatsapp] ${telefone} pediu para ${pedido === "sair" ? "sair da" : "voltar à"} lista de campanhas`);
+  try {
+    await enviarMensagem(db, { telefone, numeroId, texto: pedido === "sair" ? CONFIRMA_SAIDA : CONFIRMA_VOLTA });
+  } catch (erro) {
+    console.error(`[webhook-whatsapp] não foi possível confirmar o pedido de ${telefone}:`, erro);
+  }
+  return true;
+}
+
+async function registrarSituacaoDeEntrega(db: Db, numeroId: number, situacao: Situacao, unidadeId?: number): Promise<number> {
   const em = (situacao.timestamp ? new Date(Number(situacao.timestamp) * 1000) : new Date()).toISOString();
   // Chegam fora de ordem às vezes (lida antes de entregue): o primeiro horário de cada uma é o que vale.
   const primeiro = (coluna: PgColumn) =>
@@ -367,6 +396,11 @@ async function registrarSituacaoDeEntrega(db: Db, numeroId: number, situacao: Si
   } else if (situacao.status === "failed") {
     // A Meta aceitou, mas não entregou: deixa de contar como enviada (e de entrar no custo da campanha).
     saida = disparo = { statusEnvio: "falhou", erroDetalhe: descreverFalha(situacao) };
+    // 131050: o próprio cliente parou de aceitar marketing da empresa no WhatsApp — entra na lista de
+    // descadastro para as próximas campanhas nem tentarem.
+    if (situacao.errors?.[0]?.code === 131050 && situacao.recipient_id && unidadeId !== undefined) {
+      await descadastrar(db, unidadeId, situacao.recipient_id, "meta", "O cliente parou de receber marketing pelo WhatsApp");
+    }
   } else {
     return 1; // "sent": já está marcada como enviada desde que a Meta aceitou.
   }
@@ -562,7 +596,7 @@ export function criarWebhookWhatsapp(): Router {
           console.log(
             `[webhook-whatsapp] status ${situacao.status} para ${situacao.recipient_id ?? "?"} (${situacao.id})${erros ? ` -> ${erros}` : ""}`,
           );
-          const achadas = await registrarSituacaoDeEntrega(db, mudanca.numeroId, situacao);
+          const achadas = await registrarSituacaoDeEntrega(db, mudanca.numeroId, situacao, mudanca.unidadeId);
           if (achadas === 0) {
             setTimeout(() => {
               registrarSituacaoDeEntrega(db, mudanca.numeroId, situacao).catch((erro) =>
@@ -610,6 +644,11 @@ export function criarWebhookWhatsapp(): Router {
         const { telefone } = registro;
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
+        // "sair"/"parar" (ou o botão "Parar promoções"): sai da lista de campanhas e recebe a confirmação, sem
+        // o bot responder por cima. "voltar" desfaz.
+        if (conteudo.tipo === "texto" && (await tratarPedidoDeDescadastro(db, mensagem.unidadeId, telefone, mensagem.numeroId, conteudo.texto))) {
+          continue;
+        }
         await acionarAgenteSeLigado(db, telefone, mensagem.numeroId, mensagem.unidadeId, conteudo, nomePerfil);
         pedirAnaliseDaConversa(mensagem.numeroId, telefone);
       }

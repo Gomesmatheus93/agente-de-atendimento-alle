@@ -110,6 +110,12 @@ const ICONES = {
   mais: <path d="M12 5v14M5 12h14" />,
   setaDireita: <path d="M5 12h14m-6-6 6 6-6 6" />,
   setaDiagonal: <path d="M7 17 17 7M8 7h9v9" />,
+  proibido: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.7 5.7 12.6 12.6" />
+    </>
+  ),
   sino: (
     <>
       <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
