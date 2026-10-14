@@ -46,6 +46,7 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
       { tela: "configuracoes", label: "Configurações", href: hrefDe({ tela: "configuracoes" }), icone: "engrenagem", soAdmin: true },
       { tela: "usuarios", label: "Equipe", href: hrefDe({ tela: "usuarios" }), icone: "usuarios", soAdmin: true },
       { tela: "saude", label: "Saúde do sistema", href: hrefDe({ tela: "saude" }), icone: "pulso" },
+      { tela: "rede", label: "Visão da rede", href: hrefDe({ tela: "rede" }), icone: "grafico", soSuperadmin: true },
       { tela: "unidades", label: "Unidades", href: hrefDe({ tela: "unidades" }), icone: "predio", soSuperadmin: true },
     ],
   },
@@ -80,7 +81,7 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   const grupos = GRUPOS.map((grupo) => ({
     ...grupo,
     itens: grupo.itens.filter(
-      (item) => (!item.soAdmin || ehAdmin) && (!item.soSuperadmin || ehSuperadmin) && (comUnidade || item.tela === "unidades"),
+      (item) => (!item.soAdmin || ehAdmin) && (!item.soSuperadmin || ehSuperadmin) && (comUnidade || item.tela === "unidades" || item.tela === "rede"),
     ),
   })).filter((grupo) => grupo.itens.length > 0);
 
@@ -179,7 +180,7 @@ function SeletorDeUnidade() {
         disabled={entrar.isPending}
         className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] font-medium normal-case tracking-normal text-sidebar-ink"
       >
-        <option value="">Nenhuma (só Unidades)</option>
+        <option value="">Nenhuma (visão da rede)</option>
         {(unidades.data ?? []).map((unidade) => (
           <option key={unidade.id} value={unidade.id}>
             {unidade.nome}

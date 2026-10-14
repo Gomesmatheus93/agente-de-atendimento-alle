@@ -18,7 +18,8 @@ export type Rota =
   | { tela: "unidades" }
   | { tela: "instagram" }
   | { tela: "saude" }
-  | { tela: "contatos" };
+  | { tela: "contatos" }
+  | { tela: "rede" };
 
 export function parseHash(hash: string): Rota {
   const partes = hash.replace(/^#\/?/, "").split("/").filter(Boolean);
@@ -49,6 +50,7 @@ export function parseHash(hash: string): Rota {
   if (partes[0] === "instagram") return { tela: "instagram" };
   if (partes[0] === "saude") return { tela: "saude" };
   if (partes[0] === "contatos") return { tela: "contatos" };
+  if (partes[0] === "rede") return { tela: "rede" };
 
   if (partes[0] === "campanhas" && partes[1] === "insights") return { tela: "campanhas-insights" };
   if (partes[0] === "campanhas") {
@@ -90,6 +92,8 @@ export function hrefDe(rota: Rota): string {
       return "#/saude";
     case "contatos":
       return "#/contatos";
+    case "rede":
+      return "#/rede";
     case "unidades":
       return "#/unidades";
     case "instagram":

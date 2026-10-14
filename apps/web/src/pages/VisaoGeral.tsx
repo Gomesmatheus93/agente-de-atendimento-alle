@@ -191,7 +191,7 @@ function AlertaAgora({ agora }: { agora: Dono["agora"] }) {
 }
 
 // Variação contra o período anterior, já no sentido certo (subir custo é ruim).
-function Variacao({
+export function Variacao({
   atual,
   anterior,
   altaEhBoa,

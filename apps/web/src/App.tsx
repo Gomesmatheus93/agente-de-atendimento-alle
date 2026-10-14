@@ -20,6 +20,7 @@ import { Templates } from "./pages/Templates.js";
 import { VisaoGeral } from "./pages/VisaoGeral.js";
 import { Saude } from "./pages/Saude.js";
 import { Contatos } from "./pages/Contatos.js";
+import { Rede } from "./pages/Rede.js";
 
 export function App() {
   const utils = trpc.useUtils();
@@ -60,7 +61,16 @@ export function App() {
 function Painel({ semUnidade }: { semUnidade: boolean }) {
   const rota = useRota();
 
-  // Superadmin sem unidade escolhida: só a tela Unidades faz sentido (o resto é dado de alguma unidade).
+  // A visão da rede não depende de unidade escolhida.
+  if (rota.tela === "rede") {
+    return (
+      <Layout telaAtiva="rede" titulo="Visão da rede" descricao="Todas as unidades lado a lado: quem cresce, quem converte e quem precisa de atenção.">
+        <Rede />
+      </Layout>
+    );
+  }
+
+  // Superadmin sem unidade escolhida: só Unidades e a visão da rede fazem sentido (o resto é dado de alguma unidade).
   if (semUnidade || rota.tela === "unidades") {
     return (
       <Layout telaAtiva="unidades" titulo="Unidades" descricao="Cada academia com o próprio painel, número e equipe.">
