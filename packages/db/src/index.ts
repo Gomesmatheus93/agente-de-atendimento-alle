@@ -5,3 +5,4 @@ export * from "./cripto.js";
 export * from "./conversas.js";
 export * from "./unidade.js";
 export * from "./instagram.js";
+export * from "./armazenamento.js";

@@ -5,7 +5,7 @@ import express from "express";
 import { criarRouterIntegracoes } from "./integracoes/router.js";
 import { criarRotasInstagram } from "./instagram/conexao.js";
 import { criarAvisosDaMeta, paginaExclusao, paginaPrivacidade } from "./instagram/paginasPublicas.js";
-import { diretorioDeUploads } from "./media/armazenamento.js";
+import { ArquivoNaoEncontrado, lerArquivo, nomeDoArquivo } from "@atendimento-academias/db";
 import { cabecalhosDeSeguranca } from "./seguranca.js";
 import { createContext, usuarioDoCookie } from "./trpc/context.js";
 import { appRouter } from "./trpc/router.js";
@@ -40,19 +40,26 @@ painel.use(
     maxBodySize: MAX_CORPO_PAINEL,
   }),
 );
-// Áudio de nota de voz, figurinha, imagens de template e do agente: gravados em disco (media/armazenamento.ts)
-// e servidos daqui só para quem tem sessão — são mídias de clientes. A Meta não busca nada aqui: o worker lê
-// o arquivo do disco e sobe para ela. "private" impede proxy/CDN de guardar cópia para outros.
-painel.use(
-  "/uploads",
-  (req, res, next) => {
-    usuarioDoCookie(req.headers.cookie).then(
-      (usuario) => (usuario ? next() : res.status(401).end()),
-      next,
-    );
-  },
-  express.static(diretorioDeUploads(), { maxAge: "30d", immutable: true, setHeaders: (res) => res.setHeader("Cache-Control", "private, max-age=2592000, immutable") }),
-);
+// Arquivos (áudios, figurinhas, imagens, documentos, imagens de template e do agente): no S3 ou na pasta local
+// (packages/db/src/armazenamento.ts), servidos daqui só para quem tem sessão — são mídias de clientes. A Meta não
+// busca nada aqui: o worker lê o arquivo e sobe para ela. "private" impede proxy/CDN de guardar cópia.
+painel.get("/uploads/:arquivo", async (req, res) => {
+  const usuario = await usuarioDoCookie(req.headers.cookie).catch(() => null);
+  if (!usuario) {
+    res.status(401).end();
+    return;
+  }
+  try {
+    const { buffer, mimeType } = await lerArquivo(req.params.arquivo);
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+    // Documento abre no navegador quando dá (PDF), sem virar página do painel.
+    res.setHeader("Content-Disposition", `inline; filename="${nomeDoArquivo(req.params.arquivo)}"`);
+    res.send(buffer);
+  } catch (erro) {
+    res.status(erro instanceof ArquivoNaoEncontrado ? 404 : 500).end();
+  }
+});
 painel.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });

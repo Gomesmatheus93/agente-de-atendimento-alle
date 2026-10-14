@@ -14,10 +14,12 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
-    "seed:demo": "tsx --env-file-if-exists=../../.env src/seed-demo.ts"
+    "seed:demo": "tsx --env-file-if-exists=../../.env src/seed-demo.ts",
+    "migrar:s3": "tsx --env-file-if-exists=../../.env src/migrar-uploads-s3.ts"
   },
   "dependencies": {
     "@atendimento-academias/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1150.0",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },
