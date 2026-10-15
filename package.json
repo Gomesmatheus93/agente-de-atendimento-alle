@@ -14,9 +14,14 @@
     "db:generate": "pnpm --filter @atendimento-academias/db generate",
     "db:migrate": "pnpm --filter @atendimento-academias/db migrate",
     "db:seed": "pnpm --filter @atendimento-academias/db seed",
-    "db:seed:demo": "pnpm --filter @atendimento-academias/db seed:demo"
+    "db:seed:demo": "pnpm --filter @atendimento-academias/db seed:demo",
+    "test": "pnpm --filter @atendimento-academias/api test",
+    "test:infra": "sh scripts/testes-infra.sh"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "msgpackr-extract"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract"
+    ]
   }
 }

@@ -98,6 +98,20 @@ pnpm dev:web      # http://localhost:5173
 
 A API sobe **dois servidores**: o do painel (tRPC), preso a `127.0.0.1`, e o do webhook, que é o único que precisa ser alcançável pela internet. Aponte o túnel só para a porta do webhook — assim expor o webhook não expõe junto as rotas que criam campanha e guardam credenciais. O painel fala com a API pelo proxy do Vite (`/trpc`), o que também faz o cookie de sessão valer sem CORS.
 
+## Testes automáticos
+
+Rodam num Postgres e num Redis só deles (nunca no Supabase: os testes apagam e recriam o banco inteiro).
+
+```bash
+pnpm test:infra   # sobe o banco e o Redis de teste (podman ou docker), uma vez
+pnpm test         # roda os testes (apps/api/test)
+```
+
+Cobrem o que mais custa quebrar: isolamento entre unidades e papéis, login e sessão, webhooks do WhatsApp
+e do Instagram (assinatura, mensagem repetida, "sair"), envio (janela de 24h, assinatura, campanha sem
+descadastrados, imagem que falha), exclusão de dados (LGPD) e regras de telefone/URLs. A Meta, o n8n e o
+EVO são simulados. Rode antes de cada deploy.
+
 ## Agendamento e calendário
 
 - **Agendar:** no último passo de **Nova campanha**, escolha "Agendar" e uma data/hora (mínimo 2 minutos à frente, máximo 1 ano). A campanha é cadastrada com status `agendada` e a data em `campanhas_disparo.disparo_em`; os destinatários ficam `pendente`, sem entrar na fila.
