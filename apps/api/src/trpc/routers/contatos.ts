@@ -5,6 +5,8 @@ import {
   doNumeroDaUnidade,
   etiquetas,
   funilClientes,
+  numerosWhatsapp,
+  qualificada as q,
   respostasClientes,
   segmentos,
   type Db,
@@ -35,20 +37,22 @@ function escaparLike(valor: string): string {
 }
 
 // Última mensagem que o contato mandou para algum número da unidade.
-function ultimaMensagem(unidadeId: number): SQL<Date | null> {
+export function ultimaMensagem(unidadeId: number): SQL<Date | null> {
   return sql<Date | null>`(
-    select max(${respostasClientes.recebidaEm}) from ${respostasClientes}
-    where ${respostasClientes.telefone} = ${contatosUnidade.telefone} and ${doNumeroDaUnidade(respostasClientes.numeroId, unidadeId)}
+    select max(${q(respostasClientes.recebidaEm)}) from ${respostasClientes}
+    where ${q(respostasClientes.telefone)} = ${q(contatosUnidade.telefone)} and ${q(respostasClientes.numeroId)} in (
+      select ${q(numerosWhatsapp.id)} from ${numerosWhatsapp} where ${q(numerosWhatsapp.unidadeId)} = ${unidadeId}
+    )
   )`;
 }
 
-function descadastrado(unidadeId: number): SQL<boolean> {
+export function descadastrado(unidadeId: number): SQL<boolean> {
   return sql<boolean>`exists (
-    select 1 from ${descadastros} where ${descadastros.unidadeId} = ${unidadeId} and ${descadastros.telefone} = ${contatosUnidade.telefone}
+    select 1 from ${descadastros} where ${q(descadastros.unidadeId)} = ${unidadeId} and ${q(descadastros.telefone)} = ${q(contatosUnidade.telefone)}
   )`;
 }
 
-function condicoes(unidadeId: number, filtro: FiltroContatos): SQL[] {
+export function condicoes(unidadeId: number, filtro: FiltroContatos): SQL[] {
   const lista: SQL[] = [eq(contatosUnidade.unidadeId, unidadeId)];
   const busca = filtro.busca?.trim();
   if (busca) {
@@ -167,9 +171,11 @@ export const contatosRouter = router({
             ultimaMensagemEm: ultimaMensagem(ctx.unidadeId),
             descadastrado: descadastrado(ctx.unidadeId),
             numeroId: sql<number | null>`(
-              select ${respostasClientes.numeroId} from ${respostasClientes}
-              where ${respostasClientes.telefone} = ${contatosUnidade.telefone} and ${doNumeroDaUnidade(respostasClientes.numeroId, ctx.unidadeId)}
-              order by ${respostasClientes.recebidaEm} desc limit 1
+              select ${q(respostasClientes.numeroId)} from ${respostasClientes}
+              where ${q(respostasClientes.telefone)} = ${q(contatosUnidade.telefone)} and ${q(respostasClientes.numeroId)} in (
+                select ${q(numerosWhatsapp.id)} from ${numerosWhatsapp} where ${q(numerosWhatsapp.unidadeId)} = ${ctx.unidadeId}
+              )
+              order by ${q(respostasClientes.recebidaEm)} desc limit 1
             )`,
           })
           .from(contatosUnidade)
@@ -348,7 +354,7 @@ export const contatosRouter = router({
         id: etiquetas.id,
         nome: etiquetas.nome,
         cor: etiquetas.cor,
-        contatos: sql<number>`(select count(*) from ${contatoEtiquetas} where ${contatoEtiquetas.etiquetaId} = ${etiquetas.id})`,
+        contatos: sql<number>`(select count(*) from ${contatoEtiquetas} where ${q(contatoEtiquetas.etiquetaId)} = ${q(etiquetas.id)})`,
       })
       .from(etiquetas)
       .where(eq(etiquetas.unidadeId, ctx.unidadeId))

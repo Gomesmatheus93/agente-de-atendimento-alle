@@ -21,6 +21,7 @@ import {
   type Nota,
 } from "../components/Atendimento.js";
 import { EtiquetasDaConversa } from "../components/Etiquetas.js";
+import { BotaoExportar } from "../components/Exportar.js";
 import { ConversasInstagram } from "./ConversasInstagram.js";
 import { SeloDescadastro, SeloEvo } from "../components/Evo.js";
 import { Button } from "../components/ui/Button.js";
@@ -511,6 +512,7 @@ function ConversaAberta({
   });
 
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const exportarConversa = trpc.exportacoes.conversa.useMutation();
   const papel = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel;
   const ehAdmin = papel === "admin" || papel === "superadmin";
   const apagarDados = trpc.conversas.apagarDadosDoCliente.useMutation({
@@ -621,6 +623,7 @@ function ConversaAberta({
           <SeloEvo telefone={telefone} numeroId={numeroId} nome={conversa.nome} />
           <SeloDescadastro telefone={telefone} numeroId={numeroId} />
           <IndicadorDaJanela expiraEm={conversa.janela.expiraEm} />
+          <BotaoExportar compacto arquivo={`conversa ${titulo}`} gerar={() => exportarConversa.mutateAsync({ telefone, numeroId })} />
           <button
             type="button"
             onClick={() => marcarNaoLida.mutate({ telefone, numeroId })}

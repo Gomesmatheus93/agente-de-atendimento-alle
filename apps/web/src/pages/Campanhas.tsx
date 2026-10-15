@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { CancelarAgendamentoBotao } from "../components/CancelarAgendamentoBotao.js";
+import { BotaoExportar } from "../components/Exportar.js";
 import { Card } from "../components/Card.js";
 import { MensagemPreview } from "../components/MensagemPreview.js";
 import { StatusBadge } from "../components/StatusBadge.js";
@@ -375,6 +376,7 @@ function DetalheCampanha({ campanhaId }: { campanhaId: number }) {
 }
 
 function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
+  const exportarCampanha = trpc.exportacoes.campanha.useMutation();
   const detalheQuery = trpc.campanhas.detalhe.useQuery(
     { id: campanhaId },
     {
@@ -431,7 +433,10 @@ function ConteudoDetalhe({ campanhaId }: { campanhaId: number }) {
               {campanha.templateNome} · criada em {formatarDataHora(campanha.createdAt)}
             </p>
           </div>
-          <StatusBadge status={campanha.status} />
+          <div className="flex items-center gap-2">
+            <BotaoExportar compacto arquivo={`campanha ${campanha.nome}`} gerar={() => exportarCampanha.mutateAsync({ id: campanha.id })} />
+            <StatusBadge status={campanha.status} />
+          </div>
         </div>
 
         {campanha.status === "agendada" && (

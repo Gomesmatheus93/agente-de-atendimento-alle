@@ -11,6 +11,7 @@ import { descadastrosRouter } from "./routers/descadastros.js";
 import { dmsInstagramRouter } from "./routers/dmsInstagram.js";
 import { duvidasRouter } from "./routers/duvidas.js";
 import { evoRouter } from "./routers/evo.js";
+import { exportacoesRouter } from "./routers/exportacoes.js";
 import { funilRouter } from "./routers/funil.js";
 import { instagramRouter } from "./routers/instagram.js";
 import { redeRouter } from "./routers/rede.js";
@@ -32,6 +33,7 @@ export const appRouter = router({
   dmsInstagram: dmsInstagramRouter,
   duvidas: duvidasRouter,
   evo: evoRouter,
+  exportacoes: exportacoesRouter,
   funil: funilRouter,
   instagram: instagramRouter,
   notas: notasRouter,

@@ -1,4 +1,5 @@
 import {
+  qualificada as q,
   apagarDadosDoInstagram,
   ativarDmsInstagram,
   CHAVE_N8N_INSTAGRAM_URL,
@@ -70,14 +71,14 @@ export const dmsInstagramRouter = router({
         precisaHumano: conversasInstagram.precisaHumano,
         ultimaDoClienteEm: conversasInstagram.ultimaDoClienteEm,
         previa: sql<string | null>`(
-          select ${mensagensInstagram.texto} from ${mensagensInstagram}
-          where ${mensagensInstagram.conversaId} = ${conversasInstagram.id}
-          order by ${mensagensInstagram.criadaEm} desc limit 1
+          select ${q(mensagensInstagram.texto)} from ${mensagensInstagram}
+          where ${q(mensagensInstagram.conversaId)} = ${q(conversasInstagram.id)}
+          order by ${q(mensagensInstagram.criadaEm)} desc limit 1
         )`,
         previaDoCliente: sql<boolean | null>`(
-          select ${mensagensInstagram.origem} = 'cliente' from ${mensagensInstagram}
-          where ${mensagensInstagram.conversaId} = ${conversasInstagram.id}
-          order by ${mensagensInstagram.criadaEm} desc limit 1
+          select ${q(mensagensInstagram.origem)} = 'cliente' from ${mensagensInstagram}
+          where ${q(mensagensInstagram.conversaId)} = ${q(conversasInstagram.id)}
+          order by ${q(mensagensInstagram.criadaEm)} desc limit 1
         )`,
       })
       .from(conversasInstagram)

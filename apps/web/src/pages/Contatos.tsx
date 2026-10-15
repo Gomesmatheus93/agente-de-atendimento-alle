@@ -13,6 +13,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Card } from "../components/Card.js";
 import { ChipEtiqueta, ListaDeEtiquetas, MenuEtiquetas, ROTULO_COR, estiloDaCor, useEtiquetas, type Etiqueta } from "../components/Etiquetas.js";
+import { BotaoExportar } from "../components/Exportar.js";
 import { Button } from "../components/ui/Button.js";
 import { EstadoErro, EstadoVazio, Esqueleto } from "../components/ui/EstadoVazio.js";
 import { Icone } from "../components/ui/Icone.js";
@@ -101,6 +102,7 @@ function AbaContatos({ filtro, onFiltro }: { filtro: FiltroContatos; onFiltro: (
   }, [filtro]);
 
   const lista = trpc.contatos.listar.useQuery({ filtro, pagina }, { placeholderData: keepPreviousData });
+  const exportarContatos = trpc.exportacoes.contatos.useMutation();
   const dados = lista.data;
 
   const invalidar = () => {
@@ -161,6 +163,7 @@ function AbaContatos({ filtro, onFiltro }: { filtro: FiltroContatos; onFiltro: (
             <Icone nome="upload" tamanho={15} />
             Importar planilha
           </Button>
+          <BotaoExportar arquivo="contatos" gerar={() => exportarContatos.mutateAsync(filtro)} />
           <Button onClick={() => setEditando("novo")}>
             <Icone nome="mais" tamanho={15} />
             Novo contato
