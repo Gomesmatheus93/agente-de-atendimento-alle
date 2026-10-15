@@ -35,10 +35,10 @@ function formatarMinutos(minutos: number | null): string {
   return `${Math.round(horas / 24)} d`;
 }
 
-// Abas da tela Campanhas: o quadro (kanban) e os insights.
+// Abas da tela Campanhas: a lista e os insights.
 export function AbasCampanhas({ ativa }: { ativa: "quadro" | "insights" }) {
   const abas = [
-    { id: "quadro", rotulo: "Quadro", href: hrefDe({ tela: "campanhas", campanhaId: null }), icone: "kanban" },
+    { id: "quadro", rotulo: "Campanhas", href: hrefDe({ tela: "campanhas", campanhaId: null }), icone: "menu" },
     { id: "insights", rotulo: "Insights", href: hrefDe({ tela: "campanhas-insights" }), icone: "grafico" },
   ] as const;
   return (

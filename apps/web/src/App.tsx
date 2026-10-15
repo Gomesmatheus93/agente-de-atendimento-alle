@@ -122,7 +122,7 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
         <Layout
           telaAtiva="campanhas"
           titulo="Campanhas"
-          descricao="Status de envio de cada número, atualizado em tempo real."
+          descricao="O resultado de cada disparo: entregues, lidas, respostas e custo."
           ampla
         >
           <Campanhas campanhaId={rota.campanhaId} />

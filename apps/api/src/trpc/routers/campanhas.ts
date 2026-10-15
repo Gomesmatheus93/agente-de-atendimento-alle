@@ -9,7 +9,7 @@ import {
   preencherTemplate,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { carregarProgresso, carregarRespondentes, precoUnitarioDe, progressoVazio, taxa } from "../progresso.js";
 import { criarCampanha } from "../../servicos/campanhas.js";
 import { procedimentoUnidade, router } from "../trpc.js";
@@ -202,16 +202,31 @@ export const campanhasRouter = router({
       .limit(input.limite);
 
     const ids = campanhas.map((campanha) => campanha.id);
-    const [progressoPorCampanha, respondentesPorCampanha] = await Promise.all([
+    const [progressoPorCampanha, respondentesPorCampanha, checks] = await Promise.all([
       carregarProgresso(ctx.db, ids),
       carregarRespondentes(ctx.db, ids),
+      // Checks do WhatsApp: quantos chegaram no aparelho e quantos o cliente abriu.
+      ids.length === 0
+        ? Promise.resolve([])
+        : ctx.db
+            .select({
+              campanhaId: disparoDestinatarios.campanhaId,
+              entregues: count(disparoDestinatarios.entregueEm),
+              lidas: count(disparoDestinatarios.lidaEm),
+            })
+            .from(disparoDestinatarios)
+            .where(inArray(disparoDestinatarios.campanhaId, ids))
+            .groupBy(disparoDestinatarios.campanhaId),
     ]);
+    const checksPorCampanha = new Map(checks.map((c) => [c.campanhaId, c]));
 
     return campanhas.map(({ custoUnitario, ...campanha }) => {
       const progresso = progressoPorCampanha.get(campanha.id) ?? progressoVazio();
       return {
         ...campanha,
         progresso,
+        entregues: Number(checksPorCampanha.get(campanha.id)?.entregues ?? 0),
+        lidas: Number(checksPorCampanha.get(campanha.id)?.lidas ?? 0),
         ...resumoRetornoECusto(progresso.enviado, respondentesPorCampanha.get(campanha.id) ?? 0, custoUnitario),
       };
     });
