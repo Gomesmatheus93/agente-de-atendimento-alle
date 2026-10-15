@@ -1,5 +1,5 @@
 import type { Worker } from "bullmq";
-import { configuracoes, createDbClient } from "@atendimento-academias/db";
+import { aplicarRetencao, configuracoes, createDbClient } from "@atendimento-academias/db";
 import { createDisparoWorker } from "./queue/disparo-queue.js";
 import { createMensagemSaidaWorker } from "./queue/mensagem-saida-queue.js";
 import { createIaSugestaoWorker } from "./queue/ia-sugestao-queue.js";
@@ -59,6 +59,18 @@ function baterCoracao(): void {
     .onConflictDoUpdate({ target: [configuracoes.unidadeId, configuracoes.chave], set: { valor: new Date().toISOString() } })
     .catch((erro: unknown) => console.error("[worker] não foi possível registrar o batimento:", erro));
 }
+// Retenção (LGPD): com RETENCAO_CONVERSAS_MESES, conversas paradas há mais tempo que isso são apagadas de
+// vez, uma vez por dia. Sem a variável, nada é apagado automaticamente.
+const mesesDeRetencao = Number(process.env.RETENCAO_CONVERSAS_MESES ?? 0);
+if (process.env.NODE_ENV === "production" && Number.isInteger(mesesDeRetencao) && mesesDeRetencao > 0) {
+  const reter = () =>
+    void aplicarRetencao(db, mesesDeRetencao)
+      .then((r) => (r.conversas + r.dms > 0 ? console.log(`[lgpd] retenção de ${mesesDeRetencao} meses: ${r.conversas} conversa(s) e ${r.dms} DM(s) apagadas`) : undefined))
+      .catch((erro) => console.error("[lgpd] falha na retenção:", erro));
+  setTimeout(reter, 10 * 60_000).unref();
+  setInterval(reter, 24 * 60 * 60_000).unref();
+}
+
 if (process.env.NODE_ENV === "production") {
   baterCoracao();
   setInterval(baterCoracao, 60_000).unref();

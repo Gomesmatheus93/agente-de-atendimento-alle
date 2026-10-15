@@ -36,5 +36,7 @@ export const respostasClientes = pgTable(
     campanhaIdx: index("respostas_clientes_campanha_idx").on(table.campanhaId),
     telefoneIdx: index("respostas_clientes_telefone_idx").on(table.telefone, table.recebidaEm),
     recebidaEmIdx: index("respostas_clientes_recebida_em_idx").on(table.recebidaEm),
+    // /uploads confere de qual unidade é o arquivo pedido.
+    midiaIdx: index("respostas_clientes_midia_idx").on(table.midiaUrl),
   }),
 );

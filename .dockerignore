@@ -8,3 +8,4 @@ node_modules
 uploads
 *.log
 packages/db/migrations-mysql
+.claude

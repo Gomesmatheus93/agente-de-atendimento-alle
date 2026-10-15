@@ -2,7 +2,7 @@ import { gerarHashDeSenha, numerosWhatsapp, sessoes, unidades, usuarios } from "
 import { atualizarUnidadeInputSchema, criarUnidadeInputSchema, entrarNaUnidadeInputSchema } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import { asc, count, eq, inArray } from "drizzle-orm";
-import { tokenDaSessao } from "../context.js";
+import { hashDaSessao, tokenDaSessao } from "../context.js";
 import { procedimentoSuperadmin, router } from "../trpc.js";
 
 // Tela Unidades: só o superadmin. Cada unidade nasce com o dono (admin), que cadastra o número e a equipe.
@@ -70,7 +70,7 @@ export const unidadesRouter = router({
       if (!unidade) throw new TRPCError({ code: "NOT_FOUND", message: "Unidade não encontrada" });
     }
     const token = tokenDaSessao(ctx.req.headers.cookie);
-    if (token) await ctx.db.update(sessoes).set({ unidadeId: input.id }).where(eq(sessoes.token, token));
+    if (token) await ctx.db.update(sessoes).set({ unidadeId: input.id }).where(eq(sessoes.token, hashDaSessao(token)));
     return { id: input.id };
   }),
 });

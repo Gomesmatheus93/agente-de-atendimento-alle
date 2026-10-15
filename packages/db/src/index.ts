@@ -7,3 +7,5 @@ export * from "./unidade.js";
 export * from "./instagram.js";
 export * from "./armazenamento.js";
 export * from "./descadastro.js";
+export * from "./acessoArquivos.js";
+export * from "./lgpd.js";

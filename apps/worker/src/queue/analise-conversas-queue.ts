@@ -21,6 +21,7 @@ import {
   CHAVE_ANALISE_STATUS,
   type AnaliseConversasJobData,
   type StatusDaAnalise,
+  mascararTelefone,
 } from "@atendimento-academias/shared";
 import { Queue, Worker } from "bullmq";
 import { and, count, desc, eq, isNotNull, max } from "drizzle-orm";
@@ -214,7 +215,7 @@ async function rodarAnalise(db: Db, analista: AnalistaConversas, origem: Analise
       analisadas += 1;
     } catch (erro) {
       erros += 1;
-      console.error(`[analise] falha na conversa ${conversa.numeroId}/${conversa.telefone}:`, erro);
+      console.error(`[analise] falha na conversa ${conversa.numeroId}/${mascararTelefone(conversa.telefone)}:`, erro);
     }
   }
 
@@ -284,7 +285,7 @@ async function analisarConversaAoVivo(db: Db, analista: AnalistaConversas, numer
     noFunil?.etapaOrigem === "manual",
   );
   if (resultado && resultado !== "sem_cliente") {
-    console.log(`[funil] ${telefone} reanalisada ao vivo (${resultado.tokensEntrada} tokens de entrada, ${resultado.tokensSaida} de saída)`);
+    console.log(`[funil] ${mascararTelefone(telefone)} reanalisada ao vivo (${resultado.tokensEntrada} tokens de entrada, ${resultado.tokensSaida} de saída)`);
   }
 }
 

@@ -1,3 +1,4 @@
+import { mascararTelefone } from "@atendimento-academias/shared";
 import type {
   WhatsAppArquivoMessage,
   WhatsAppAudioMessage,
@@ -16,7 +17,7 @@ const SUFIXO_FALHA_SIMULADA = "0000";
 export class WhatsAppProviderStub implements WhatsAppProvider {
   async enviarTemplate(mensagem: WhatsAppTemplateMessage): Promise<WhatsAppSendResult> {
     console.warn(
-      `[WhatsAppProviderStub] simulando envio. telefone=${mensagem.telefone} template=${mensagem.template.nome} parametros=${JSON.stringify(mensagem.parametros)}`,
+      `[WhatsAppProviderStub] simulando envio. telefone=${mascararTelefone(mensagem.telefone)} template=${mensagem.template.nome} parametros=${JSON.stringify(mensagem.parametros)}`,
     );
 
     if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
@@ -27,7 +28,7 @@ export class WhatsAppProviderStub implements WhatsAppProvider {
   }
 
   async enviarTexto(mensagem: WhatsAppTextMessage): Promise<WhatsAppSendResult> {
-    console.warn(`[WhatsAppProviderStub] simulando texto livre. telefone=${mensagem.telefone} texto=${JSON.stringify(mensagem.texto)}`);
+    console.warn(`[WhatsAppProviderStub] simulando texto livre. telefone=${mascararTelefone(mensagem.telefone)} texto=${JSON.stringify(mensagem.texto)}`);
 
     if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
       return { sucesso: false, erro: "Falha simulada pelo stub (telefone terminado em 0000)" };
@@ -38,7 +39,7 @@ export class WhatsAppProviderStub implements WhatsAppProvider {
 
   async enviarAudio(mensagem: WhatsAppAudioMessage): Promise<WhatsAppSendResult> {
     console.warn(
-      `[WhatsAppProviderStub] simulando áudio. telefone=${mensagem.telefone} mimeType=${mensagem.mimeType} bytes=${mensagem.audio.byteLength}`,
+      `[WhatsAppProviderStub] simulando áudio. telefone=${mascararTelefone(mensagem.telefone)} mimeType=${mensagem.mimeType} bytes=${mensagem.audio.byteLength}`,
     );
 
     if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
@@ -49,7 +50,7 @@ export class WhatsAppProviderStub implements WhatsAppProvider {
   }
 
   async enviarImagem(mensagem: WhatsAppImageMessage): Promise<WhatsAppSendResult> {
-    console.warn(`[WhatsAppProviderStub] simulando imagem. telefone=${mensagem.telefone} imagem=${mensagem.midiaUrl} legenda=${JSON.stringify(mensagem.legenda ?? "")}`);
+    console.warn(`[WhatsAppProviderStub] simulando imagem. telefone=${mascararTelefone(mensagem.telefone)} imagem=${mensagem.midiaUrl} legenda=${JSON.stringify(mensagem.legenda ?? "")}`);
 
     if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
       return { sucesso: false, erro: "Falha simulada pelo stub (telefone terminado em 0000)" };
@@ -59,7 +60,7 @@ export class WhatsAppProviderStub implements WhatsAppProvider {
   }
 
   async enviarArquivo(mensagem: WhatsAppArquivoMessage): Promise<WhatsAppSendResult> {
-    console.warn(`[WhatsAppProviderStub] simulando ${mensagem.tipo}. telefone=${mensagem.telefone} arquivo=${mensagem.midiaUrl} nome=${mensagem.nome ?? ""}`);
+    console.warn(`[WhatsAppProviderStub] simulando ${mensagem.tipo}. telefone=${mascararTelefone(mensagem.telefone)} arquivo=${mensagem.midiaUrl} nome=${mensagem.nome ?? ""}`);
 
     if (mensagem.telefone.endsWith(SUFIXO_FALHA_SIMULADA)) {
       return { sucesso: false, erro: "Falha simulada pelo stub (telefone terminado em 0000)" };

@@ -70,7 +70,7 @@ export const mensagensInstagram = pgTable(
     autorNome: varchar("autor_nome", { length: 120 }),
     criadaEm: timestamp("criada_em", { withTimezone: true }).notNull().defaultNow(),
   },
-  (tabela) => [index("mensagens_instagram_conversa").on(tabela.conversaId, tabela.criadaEm)],
+  (tabela) => [index("mensagens_instagram_conversa").on(tabela.conversaId, tabela.criadaEm), index("mensagens_instagram_midia").on(tabela.midiaUrl)],
 );
 
 // "Foto" diária dos números da conta. A Meta só devolve parte do histórico (seguidores, por exemplo, só

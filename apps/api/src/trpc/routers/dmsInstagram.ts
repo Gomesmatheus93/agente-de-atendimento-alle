@@ -1,4 +1,5 @@
 import {
+  apagarDadosDoInstagram,
   ativarDmsInstagram,
   CHAVE_N8N_INSTAGRAM_URL,
   contasInstagram,
@@ -11,6 +12,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, gt, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { motivoUrlRecusada } from "../../rede/urlExterna.js";
 import { lerValor, salvarValor } from "../../config/plataforma.js";
 import { conversaDaUnidade, enviarDm, JANELA_DM_MS, janelaAberta, reenviarDm } from "../../instagram/dms.js";
 import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
@@ -49,6 +51,8 @@ export const dmsInstagramRouter = router({
 
   // URL do fluxo do n8n que responde as DMs (vazio = sem bot no Instagram).
   definirBot: procedimentoAdmin.input(z.object({ url: z.string().trim().url("URL inválida").max(500).or(z.literal("")) })).mutation(async ({ ctx, input }) => {
+    const recusada = input.url ? motivoUrlRecusada(input.url) : null;
+    if (recusada) throw new TRPCError({ code: "BAD_REQUEST", message: `URL do n8n: ${recusada}` });
     await salvarValor(ctx.db, ctx.unidadeId, CHAVE_N8N_INSTAGRAM_URL, input.url);
     return { ok: true };
   }),
@@ -163,6 +167,14 @@ export const dmsInstagramRouter = router({
     await conversaDaUnidade(ctx.db, input.conversaId, ctx.unidadeId);
     await ctx.db.update(conversasInstagram).set({ precisaHumano: false, motivoHumano: null }).where(eq(conversasInstagram.id, input.conversaId));
     return { ok: true };
+  }),
+
+  // Pedido de exclusão de dados (LGPD): a conversa, as mensagens e os arquivos saem de vez. Só o admin.
+  apagarDados: procedimentoAdmin.input(conversaIdSchema).mutation(async ({ ctx, input }) => {
+    await conversaDaUnidade(ctx.db, input.conversaId, ctx.unidadeId);
+    const resultado = await apagarDadosDoInstagram(ctx.db, input.conversaId);
+    console.log(`[lgpd] ${ctx.usuario.nome} apagou a DM ${input.conversaId} na unidade ${ctx.unidadeId} (${resultado.mensagens} mensagens, ${resultado.arquivos} arquivos)`);
+    return resultado;
   }),
 
   contarNaoLidas: procedimentoUnidade.query(async ({ ctx }) => {

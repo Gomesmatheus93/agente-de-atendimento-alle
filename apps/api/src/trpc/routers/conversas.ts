@@ -1,4 +1,5 @@
 import {
+  apagarDadosDoCliente,
   campanhasDisparo,
   contatos,
   conversasConfig,
@@ -25,6 +26,7 @@ import {
   preencherTemplate,
   reenviarRespostaInputSchema,
   assinarMensagem,
+  mascararTelefone,
   MAX_IMAGEM_BYTES,
   MIME_DO_ANEXO,
   TAMANHO_MAX_LEGENDA,
@@ -46,7 +48,7 @@ import {
   obterConversa,
   ultimaMensagemDoCliente,
 } from "../../servicos/conversas.js";
-import { procedimentoUnidade, router } from "../trpc.js";
+import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
 
 // Curingas do LIKE digitados pelo usuário viram texto comum.
 function escaparLike(texto: string): string {
@@ -304,6 +306,14 @@ export const conversasRouter = router({
   detalhe: procedimentoUnidade.input(detalheConversaInputSchema).query(async ({ ctx, input }) => {
     await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
     return obterConversa(ctx.db, input.telefone, input.numeroId);
+  }),
+
+  // Pedido de exclusão de dados (LGPD): apaga de verdade tudo o que a unidade tem deste cliente. Só o admin.
+  apagarDadosDoCliente: procedimentoAdmin.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {
+    await garantirNumeroDaUnidade(ctx.db, input.numeroId, ctx.unidadeId);
+    const resultado = await apagarDadosDoCliente(ctx.db, ctx.unidadeId, input.telefone);
+    console.log(`[lgpd] ${ctx.usuario.nome} apagou os dados de ${mascararTelefone(input.telefone)} na unidade ${ctx.unidadeId} (${resultado.mensagens} mensagens, ${resultado.arquivos} arquivos)`);
+    return resultado;
   }),
 
   excluir: procedimentoUnidade.input(detalheConversaInputSchema).mutation(async ({ ctx, input }) => {

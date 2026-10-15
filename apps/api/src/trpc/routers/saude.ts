@@ -16,14 +16,23 @@ export const saudeRouter = router({
       .select()
       .from(verificacoesSaude)
       .where(or(eq(verificacoesSaude.unidadeId, ctx.unidadeId), isNull(verificacoesSaude.unidadeId)));
+    // Peças da plataforma (worker, Redis, S3): só o superadmin vê o detalhe técnico (nome do bucket, texto
+    // do erro). A equipe da unidade sabe que há um problema e que ele não é dela para resolver.
+    const superadmin = ctx.usuario.papel === "superadmin";
+    const semDetalhe = (linha: (typeof linhas)[number]) =>
+      linha.unidadeId === null && !superadmin
+        ? {
+            mensagem: linha.nivel === "ok" ? "Funcionando." : "Há um problema na infraestrutura da plataforma. O responsável pela plataforma já foi avisado.",
+            acao: null,
+          }
+        : { mensagem: linha.mensagem, acao: linha.acao };
     const verificacoes = linhas
       .map((linha) => ({
         chave: linha.chave,
         plataforma: linha.unidadeId === null,
         nivel: linha.nivel,
         titulo: linha.titulo,
-        mensagem: linha.mensagem,
-        acao: linha.acao,
+        ...semDetalhe(linha),
         link: linha.link,
         desde: linha.desde.toISOString(),
         verificadoEm: linha.verificadoEm.toISOString(),

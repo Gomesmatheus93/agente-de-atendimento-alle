@@ -15,7 +15,7 @@ import {
   contasWhatsapp,
   type Db,
 } from "@atendimento-academias/db";
-import { IA_SUGESTAO_ATRASO_MS, type TipoMensagem } from "@atendimento-academias/shared";
+import { IA_SUGESTAO_ATRASO_MS, type TipoMensagem, mascararTelefone } from "@atendimento-academias/shared";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import express, { type Request, type Router } from "express";
@@ -29,9 +29,11 @@ import {
   unidadesDasContas,
 } from "../config/plataforma.js";
 import { baixarMidia, MidiaGrandeDemais } from "../meta/graph.js";
+import { fetchExterno } from "../rede/urlExterna.js";
+import { limiteDoBot, MOTIVO_LIMITE_DO_BOT } from "../limites.js";
 import { salvarBuffer } from "../media/armazenamento.js";
 import { pedirAnaliseDaConversa, pedirSugestaoIa } from "../queue.js";
-import { enviarMensagem } from "../servicos/conversas.js";
+import { enviarMensagem, passarParaHumano } from "../servicos/conversas.js";
 import { getDb } from "../trpc/context.js";
 
 // Uma resposta só é atribuída a uma campanha se chegou até esse tempo depois do envio.
@@ -221,6 +223,14 @@ async function acionarAgenteSeLigado(
 
   if (existente?.iaDesligadaManual || existente?.precisaHumano) return;
 
+  // Freio de custo: mensagens demais do mesmo cliente não acionam o bot (ficam para a equipe).
+  const limite = await limiteDoBot(`wa:${numeroId}:${telefone}`);
+  if (limite === "dia_agora") {
+    await passarParaHumano(db, telefone, numeroId, MOTIVO_LIMITE_DO_BOT);
+    console.warn(`[webhook-whatsapp] ${mascararTelefone(telefone)} passou do limite diário do bot; conversa com a equipe`);
+  }
+  if (limite !== "ok") return;
+
   const { modo, webhookN8nUrl } = await configuracaoDoAgente(db, unidadeId);
 
   // Modo n8n: a plataforma só avisa que chegou mensagem nova; quem decide o que responder (e responde,
@@ -229,12 +239,12 @@ async function acionarAgenteSeLigado(
   if (modo === "n8n") {
     if (!webhookN8nUrl) {
       console.warn(
-        `[webhook-whatsapp] modo do agente é "n8n" mas nenhuma URL de webhook está configurada; ${telefone} ficou sem resposta automática.`,
+        `[webhook-whatsapp] modo do agente é "n8n" mas nenhuma URL de webhook está configurada; ${mascararTelefone(telefone)} ficou sem resposta automática.`,
       );
       return;
     }
     try {
-      await fetch(webhookN8nUrl, {
+      await fetchExterno(webhookN8nUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -254,7 +264,7 @@ async function acionarAgenteSeLigado(
       });
     } catch (erro) {
       // A mensagem já está gravada; falhar em avisar o n8n não justifica fazer a Meta reenviar o webhook.
-      console.error(`[webhook-whatsapp] falha ao notificar o n8n para ${telefone}:`, erro);
+      console.error(`[webhook-whatsapp] falha ao notificar o n8n para ${mascararTelefone(telefone)}:`, erro);
     }
     return;
   }
@@ -262,7 +272,7 @@ async function acionarAgenteSeLigado(
   try {
     await pedirSugestaoIa(telefone, numeroId, IA_SUGESTAO_ATRASO_MS);
   } catch (erro) {
-    console.error(`[webhook-whatsapp] não foi possível pedir sugestão da IA para ${telefone}:`, erro);
+    console.error(`[webhook-whatsapp] não foi possível pedir sugestão da IA para ${mascararTelefone(telefone)}:`, erro);
   }
 }
 
@@ -404,11 +414,11 @@ async function tratarPedidoDeDescadastro(db: Db, unidadeId: number, telefone: st
   } else {
     await descadastrar(db, unidadeId, telefone, "cliente", texto);
   }
-  console.log(`[webhook-whatsapp] ${telefone} pediu para ${pedido === "sair" ? "sair da" : "voltar à"} lista de campanhas`);
+  console.log(`[webhook-whatsapp] ${mascararTelefone(telefone)} pediu para ${pedido === "sair" ? "sair da" : "voltar à"} lista de campanhas`);
   try {
     await enviarMensagem(db, { telefone, numeroId, texto: pedido === "sair" ? CONFIRMA_SAIDA : CONFIRMA_VOLTA });
   } catch (erro) {
-    console.error(`[webhook-whatsapp] não foi possível confirmar o pedido de ${telefone}:`, erro);
+    console.error(`[webhook-whatsapp] não foi possível confirmar o pedido de ${mascararTelefone(telefone)}:`, erro);
   }
   return true;
 }
@@ -669,13 +679,13 @@ export function criarWebhookWhatsapp(): Router {
 
         if (!conteudo) {
           // Reação, localização, contato: chegam no webhook mas não viram resposta do cliente.
-          console.log(`[webhook-whatsapp] ignorada: mensagem de ${mensagem.from} sem conteúdo tratável (tipo ${mensagem.type ?? "desconhecido"})`);
+          console.log(`[webhook-whatsapp] ignorada: mensagem de ${mascararTelefone(mensagem.from)} sem conteúdo tratável (tipo ${mensagem.type ?? "desconhecido"})`);
           continue;
         }
 
         const registro = await registrarResposta(db, mensagem, conteudo, mensagem.numeroId);
         if (!registro) {
-          console.log(`[webhook-whatsapp] ignorada: ${mensagem.from} nunca recebeu disparo nosso`);
+          console.log(`[webhook-whatsapp] ignorada: ${mascararTelefone(mensagem.from)} nunca recebeu disparo nosso`);
           continue;
         }
         if (!registro.nova) {
@@ -686,7 +696,7 @@ export function criarWebhookWhatsapp(): Router {
         const nomePerfil = nomePorWaId.get(mensagem.from);
         if (nomePerfil) await registrarContato(db, telefone, nomePerfil);
         await registrarNaBase(db, mensagem.unidadeId, telefone, nomePerfil).catch((erro) =>
-          console.error(`[webhook-whatsapp] não foi possível pôr ${telefone} na base de contatos:`, erro),
+          console.error(`[webhook-whatsapp] não foi possível pôr ${mascararTelefone(telefone)} na base de contatos:`, erro),
         );
         // "sair"/"parar" (ou o botão "Parar promoções"): sai da lista de campanhas e recebe a confirmação, sem
         // o bot responder por cima. "voltar" desfaz.

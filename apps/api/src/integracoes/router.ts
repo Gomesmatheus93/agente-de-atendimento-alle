@@ -1,4 +1,4 @@
-import { criarCampanhaInputSchema, detalheConversaInputSchema, enviarRespostaInputSchema, NOME_MIDIA_AGENTE } from "@atendimento-academias/shared";
+import { criarCampanhaInputSchema, detalheConversaInputSchema, enviarRespostaInputSchema, NOME_MIDIA_AGENTE, mascararTelefone } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
 import express, { type Router } from "express";
 import { z } from "zod";
@@ -30,7 +30,7 @@ export function criarRouterIntegracoes(): Router {
 
   router.use(async (req, res, next) => {
     const ip = req.ip ?? "desconhecido";
-    if (chaveBloqueada(ip)) {
+    if (await chaveBloqueada(ip)) {
       res.status(429).json({ error: "Muitas chaves inválidas. Tente de novo em alguns minutos." });
       return;
     }
@@ -39,7 +39,7 @@ export function criarRouterIntegracoes(): Router {
 
     const unidadeId = await unidadeDaChaveIntegracao(getDb(), chave);
     if (unidadeId === null) {
-      registrarFalhaDeChave(ip);
+      await registrarFalhaDeChave(ip);
       res.status(401).json({ error: "Chave de integração ausente ou inválida (header Authorization: Bearer <chave>)." });
       return;
     }
@@ -125,10 +125,10 @@ export function criarRouterIntegracoes(): Router {
       if (cadastro) {
         try {
           evo = await cadastrarNoEvo(getDb(), unidadeId, pedido.telefone, cadastro);
-          console.log(`[evo] ${pedido.telefone}: ${evo.criado ? "cadastrado como lead" : `já estava no EVO (${evo.situacao.situacao})`}`);
+          console.log(`[evo] ${mascararTelefone(pedido.telefone)}: ${evo.criado ? "cadastrado como lead" : `já estava no EVO (${evo.situacao.situacao})`}`);
         } catch (erro) {
           evo = { erro: erro instanceof Error ? erro.message : String(erro) };
-          console.error(`[evo] falha ao cadastrar ${pedido.telefone}:`, erro);
+          console.error(`[evo] falha ao cadastrar ${mascararTelefone(pedido.telefone)}:`, erro);
         }
       }
       if (!mensagem.texto && !nomeDaImagem) {

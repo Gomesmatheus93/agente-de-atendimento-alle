@@ -12,6 +12,8 @@ import {
 import { TRPCError } from "@trpc/server";
 import { and, eq, sql } from "drizzle-orm";
 import { lerValor } from "../config/plataforma.js";
+import { limiteDoBot, MOTIVO_LIMITE_DO_BOT } from "../limites.js";
+import { fetchExterno } from "../rede/urlExterna.js";
 
 // DMs do Instagram: enviar (pelo painel ou pelo bot) e avisar o n8n quando chega mensagem.
 export const JANELA_DM_MS = 24 * 60 * 60 * 1000;
@@ -93,8 +95,12 @@ export async function avisarN8nInstagram(
   if (!conversa.iaAtiva || conversa.precisaHumano) return;
   const url = await lerValor(db, unidadeId, CHAVE_N8N_INSTAGRAM_URL);
   if (!url) return;
+  // Freio de custo, como no WhatsApp.
+  const limite = await limiteDoBot(`ig:${conversa.id}`);
+  if (limite === "dia_agora") await passarDmParaHumano(db, conversa.id, MOTIVO_LIMITE_DO_BOT);
+  if (limite !== "ok") return;
   try {
-    await fetch(url, {
+    await fetchExterno(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

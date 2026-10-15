@@ -18,6 +18,7 @@ import {
   type DisparoEnvioJobData,
   type IaSugestaoJobData,
   type MensagemSaidaJobData,
+  mascararTelefone,
 } from "@atendimento-academias/shared";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
@@ -113,7 +114,7 @@ export function pedirAnaliseDaConversa(numeroId: number, telefone: string): void
         removeOnFail: true,
       },
     )
-    .catch((erro) => console.error(`[funil] não foi possível pedir a análise de ${telefone}:`, erro));
+    .catch((erro) => console.error(`[funil] não foi possível pedir a análise de ${mascararTelefone(telefone)}:`, erro));
 }
 
 let instagramQueue: Queue<InstagramColetaJobData> | undefined;

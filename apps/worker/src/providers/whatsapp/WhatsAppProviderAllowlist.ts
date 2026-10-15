@@ -1,4 +1,4 @@
-import { normalizarTelefone } from "@atendimento-academias/shared";
+import { normalizarTelefone, mascararTelefone } from "@atendimento-academias/shared";
 import type {
   WhatsAppArquivoMessage,
   WhatsAppAudioMessage,
@@ -34,7 +34,7 @@ export class WhatsAppProviderAllowlist implements WhatsAppProvider {
   private bloqueio(telefone: string): WhatsAppSendResult | null {
     if (this.permitidos.has(telefone)) return null;
 
-    console.warn(`[whatsapp:trava] envio para ${telefone} bloqueado: fora de WHATSAPP_NUMEROS_PERMITIDOS`);
+    console.warn(`[whatsapp:trava] envio para ${mascararTelefone(telefone)} bloqueado: fora de WHATSAPP_NUMEROS_PERMITIDOS`);
     return {
       sucesso: false,
       erro: `Bloqueado pela trava de teste: ${telefone} não está em WHATSAPP_NUMEROS_PERMITIDOS`,

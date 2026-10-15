@@ -142,3 +142,10 @@ export const moverEtapaInputSchema = z.object({
   id: z.number().int().positive(),
   etapa: etapaKanbanSchema.nullable(),
 });
+
+// Telefone para log: o suficiente para a equipe achar a conversa, sem expor o número inteiro (LGPD).
+export function mascararTelefone(telefone: string | null | undefined): string {
+  const digitos = (telefone ?? "").replace(/\D/g, "");
+  if (digitos.length < 8) return "****";
+  return `${digitos.slice(0, 4)}****${digitos.slice(-4)}`;
+}

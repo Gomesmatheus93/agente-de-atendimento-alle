@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { GetObjectCommand, HeadBucketCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // Onde ficam os arquivos (áudios, figurinhas, imagens e documentos recebidos e enviados, imagens de template
 // e do agente). Com S3_BUCKET configurado, num bucket da AWS — sobrevive a cada nova versão do servidor e
@@ -135,4 +135,12 @@ export async function verificarArmazenamento(): Promise<string | null> {
   if (!s3) return null;
   await s3.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET!.trim() }), { abortSignal: AbortSignal.timeout(10_000) });
   return process.env.S3_BUCKET!.trim();
+}
+
+// Apaga o arquivo (pedido de exclusão de dados, retenção). Do S3 e, se ainda houver cópia, da pasta local.
+export async function apagarArquivo(urlOuNome: string): Promise<void> {
+  const nome = nomeDoArquivo(urlOuNome);
+  const s3 = clienteS3();
+  if (s3) await s3.send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET!.trim(), Key: PREFIXO_S3 + nome }));
+  await rm(path.join(diretorioDeUploads(), nome), { force: true });
 }

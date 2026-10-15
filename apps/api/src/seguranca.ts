@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { RequestHandler } from "express";
+import { lerContagem, somarContagem } from "./limites.js";
 
 // Cabeçalhos que mandam o navegador se proteger: não adivinhar tipo de arquivo, não deixar outro site
 // abrir o painel dentro de um iframe (clickjacking), não vazar a URL para fora e, no servidor (https),
@@ -59,27 +60,14 @@ export function cabecalhosDeSeguranca(webDist: string | null): RequestHandler {
 }
 
 // Freio para quem chama a API de integração com chave errada: conferir a chave custa um scrypt, então
-// sem isso um robô poderia ocupar a CPU do servidor com chaves inventadas. Mesmo esquema do login.
+// sem isso um robô poderia ocupar a CPU do servidor com chaves inventadas. Mesmo esquema do login (Redis).
 const JANELA_MS = 15 * 60_000;
 const MAX_FALHAS = 30;
-const falhasDeChave = new Map<string, { falhas: number; desde: number }>();
 
-export function chaveBloqueada(ip: string): boolean {
-  const contagem = falhasDeChave.get(ip);
-  if (!contagem) return false;
-  if (Date.now() - contagem.desde > JANELA_MS) {
-    falhasDeChave.delete(ip);
-    return false;
-  }
-  return contagem.falhas >= MAX_FALHAS;
+export async function chaveBloqueada(ip: string): Promise<boolean> {
+  return (await lerContagem(`chave:${ip}`)).total >= MAX_FALHAS;
 }
 
-export function registrarFalhaDeChave(ip: string): void {
-  const agora = Date.now();
-  const contagem = falhasDeChave.get(ip);
-  if (contagem && agora - contagem.desde <= JANELA_MS) contagem.falhas += 1;
-  else falhasDeChave.set(ip, { falhas: 1, desde: agora });
-  if (falhasDeChave.size > 10_000) {
-    for (const [chave, valor] of falhasDeChave) if (agora - valor.desde > JANELA_MS) falhasDeChave.delete(chave);
-  }
+export async function registrarFalhaDeChave(ip: string): Promise<void> {
+  await somarContagem(`chave:${ip}`, JANELA_MS);
 }

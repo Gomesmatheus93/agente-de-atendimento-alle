@@ -15,6 +15,7 @@ import {
   JANELA_RESPOSTA_MS,
   preencherTemplate,
   type IaSugestaoJobData,
+  mascararTelefone,
 } from "@atendimento-academias/shared";
 import { Worker } from "bullmq";
 import { and, desc, eq, gt, max, sql } from "drizzle-orm";
@@ -99,7 +100,7 @@ async function sugerirResposta(db: Db, agente: AgenteAtendimento, telefone: stri
   const resultado = await agente.sugerir({ telefone, nomeCliente: contato?.nomePerfil ?? null, mensagens });
 
   if (resultado.tipo === "sem_resposta") {
-    console.warn(`[ia] sem sugestão para ${telefone}: ${resultado.motivo}`);
+    console.warn(`[ia] sem sugestão para ${mascararTelefone(telefone)}: ${resultado.motivo}`);
     return;
   }
 
@@ -135,8 +136,8 @@ async function sugerirResposta(db: Db, agente: AgenteAtendimento, telefone: stri
 
   console.log(
     resultado.tipo === "humano"
-      ? `[ia] ${telefone} passou para humano: ${resultado.motivo}`
-      : `[ia] sugestão pronta para ${telefone} (${resultado.modelo}, ${resultado.tokensEntrada} tokens de entrada, ${resultado.tokensSaida} de saída)`,
+      ? `[ia] ${mascararTelefone(telefone)} passou para humano: ${resultado.motivo}`
+      : `[ia] sugestão pronta para ${mascararTelefone(telefone)} (${resultado.modelo}, ${resultado.tokensEntrada} tokens de entrada, ${resultado.tokensSaida} de saída)`,
   );
 }
 

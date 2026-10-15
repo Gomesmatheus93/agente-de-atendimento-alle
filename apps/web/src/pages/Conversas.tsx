@@ -511,6 +511,17 @@ function ConversaAberta({
   });
 
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const papel = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel;
+  const ehAdmin = papel === "admin" || papel === "superadmin";
+  const apagarDados = trpc.conversas.apagarDadosDoCliente.useMutation({
+    onSuccess: (r) => {
+      toast.sucesso(`Dados do cliente apagados: ${r.mensagens} mensagem(ns) e ${r.arquivos} arquivo(s).`);
+      void utils.invalidate();
+      window.location.hash = hrefDe({ tela: "conversas", telefone: null, numeroId: null });
+    },
+    onError: (erro) => toast.erro(mensagemDeErro(erro)),
+    onSettled: () => setConfirmandoExclusao(false),
+  });
   const excluir = trpc.conversas.excluir.useMutation({
     onSuccess: () => {
       toast.sucesso("Conversa excluída. Se o cliente escrever de novo, ela volta começando do zero.");
@@ -636,9 +647,11 @@ function ConversaAberta({
       {confirmandoExclusao && (
         <ConfirmarExclusao
           nome={titulo}
-          excluindo={excluir.isPending}
+          excluindo={excluir.isPending || apagarDados.isPending}
           onCancelar={() => setConfirmandoExclusao(false)}
           onConfirmar={() => excluir.mutate({ telefone, numeroId })}
+          podeApagarDados={ehAdmin}
+          onApagarDados={() => apagarDados.mutate({ telefone, numeroId })}
         />
       )}
 
@@ -1736,12 +1749,18 @@ function ConfirmarExclusao({
   excluindo,
   onCancelar,
   onConfirmar,
+  podeApagarDados,
+  onApagarDados,
 }: {
   nome: string;
   excluindo: boolean;
   onCancelar: () => void;
   onConfirmar: () => void;
+  // Só o admin: pedido de exclusão de dados (LGPD) apaga de verdade, em vez de esconder.
+  podeApagarDados: boolean;
+  onApagarDados: () => void;
 }) {
+  const [apagarTudo, setApagarTudo] = useState(false);
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="titulo-excluir-conversa" className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="Cancelar" onClick={onCancelar} className="absolute inset-0 cursor-default bg-black/40" />
@@ -1762,12 +1781,24 @@ function ConfirmarExclusao({
             </ul>
           </div>
         </div>
+        {podeApagarDados && (
+          <label className={`flex cursor-pointer items-start gap-3 rounded-xl p-3 text-sm ring-1 ring-inset ${apagarTudo ? "bg-red-50 ring-red-200" : "ring-card-border"}`}>
+            <input type="checkbox" checked={apagarTudo} onChange={(e) => setApagarTudo(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#b42318]" />
+            <span>
+              <strong className="block text-ink">O cliente pediu a exclusão dos dados (LGPD)</strong>
+              <span className="text-ink-2">
+                Apaga de vez mensagens, fotos, áudios, documentos, notas, etiquetas, funil e o registro dele nas campanhas desta unidade. Não dá para
+                desfazer. Se ele pediu para não receber campanhas, esse pedido continua valendo.
+              </span>
+            </span>
+          </label>
+        )}
         <div className="flex justify-end gap-2">
           <Button variante="fantasma" onClick={onCancelar} disabled={excluindo}>
             Cancelar
           </Button>
-          <Button variante="perigo" onClick={onConfirmar} disabled={excluindo}>
-            {excluindo ? "Excluindo…" : "Excluir conversa"}
+          <Button variante="perigo" onClick={apagarTudo ? onApagarDados : onConfirmar} disabled={excluindo}>
+            {excluindo ? "Excluindo…" : apagarTudo ? "Apagar todos os dados" : "Excluir conversa"}
           </Button>
         </div>
       </div>

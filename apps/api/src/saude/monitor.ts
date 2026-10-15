@@ -20,6 +20,7 @@ import { configuracaoDoAgente, segredoDoAppDaUnidade, tokenDaConta } from "../co
 import { configEvo, testarEvo } from "../evo/cliente.js";
 import { buscarConta, ErroGraph, listarNumeros } from "../meta/graph.js";
 import { pingRedis } from "../queue.js";
+import { fetchExterno } from "../rede/urlExterna.js";
 
 // Saúde do sistema: a cada poucos minutos confere cada peça de que o atendimento depende e grava o
 // resultado em verificacoes_saude. A tela "Saúde do sistema" e o aviso do topo leem de lá; quando algo
@@ -215,7 +216,7 @@ async function verificarAgente(db: Db, unidadeId: number): Promise<Verificacao[]
   const resultado: Verificacao[] = [];
   // /healthz é do próprio n8n: confere que ele está no ar sem disparar o fluxo.
   try {
-    const resposta = await fetch(`${new URL(webhookN8nUrl).origin}/healthz`, { signal: AbortSignal.timeout(10_000) });
+    const resposta = await fetchExterno(`${new URL(webhookN8nUrl).origin}/healthz`, { signal: AbortSignal.timeout(10_000) });
     resultado.push(
       resposta.ok
         ? { chave: "agente", nivel: "ok", titulo: "Bot (n8n)", mensagem: "O n8n está no ar." }

@@ -5,7 +5,7 @@ import express from "express";
 import { criarRouterIntegracoes } from "./integracoes/router.js";
 import { criarRotasInstagram } from "./instagram/conexao.js";
 import { criarAvisosDaMeta, paginaExclusao, paginaPrivacidade } from "./instagram/paginasPublicas.js";
-import { ArquivoNaoEncontrado, lerArquivo, nomeDoArquivo } from "@atendimento-academias/db";
+import { ArquivoNaoEncontrado, arquivoDaUnidade, lerArquivo, nomeDoArquivo } from "@atendimento-academias/db";
 import { cabecalhosDeSeguranca } from "./seguranca.js";
 import { iniciarMonitorDeSaude } from "./saude/monitor.js";
 import { createContext, getDb, usuarioDoCookie } from "./trpc/context.js";
@@ -40,6 +40,10 @@ painel.use(
     router: appRouter,
     createContext,
     maxBodySize: MAX_CORPO_PAINEL,
+    // O navegador recebe uma mensagem genérica (errorFormatter); o detalhe do erro inesperado fica aqui.
+    onError: ({ error, path }) => {
+      if (error.code === "INTERNAL_SERVER_ERROR") console.error(`[trpc] erro em ${path ?? "?"}:`, error.cause ?? error);
+    },
   }),
 );
 // Arquivos (áudios, figurinhas, imagens, documentos, imagens de template e do agente): no S3 ou na pasta local
@@ -49,6 +53,12 @@ painel.get("/uploads/:arquivo", async (req, res) => {
   const usuario = await usuarioDoCookie(req.headers.cookie).catch(() => null);
   if (!usuario) {
     res.status(401).end();
+    return;
+  }
+  // Só abre arquivo da unidade em que a pessoa está (o superadmin vê o de qualquer unidade).
+  const url = `/uploads/${nomeDoArquivo(req.params.arquivo)}`;
+  if (usuario.papel !== "superadmin" && (usuario.unidadeId === null || !(await arquivoDaUnidade(getDb(), url, usuario.unidadeId).catch(() => false)))) {
+    res.status(404).end();
     return;
   }
   try {

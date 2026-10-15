@@ -219,6 +219,15 @@ function DmAberta({ conversaId }: { conversaId: number }) {
     onError: (e) => toast.erro(mensagemDeErro(e)),
   });
   const reenviar = trpc.dmsInstagram.reenviar.useMutation({ onSuccess: atualizar, onError: (e) => toast.erro(mensagemDeErro(e)) });
+  const papel = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel;
+  const apagarDados = trpc.dmsInstagram.apagarDados.useMutation({
+    onSuccess: (r) => {
+      toast.sucesso(`Dados apagados: ${r.mensagens} mensagem(ns) e ${r.arquivos} arquivo(s).`);
+      void utils.dmsInstagram.invalidate();
+      window.location.hash = hrefDe({ tela: "conversas", telefone: null, numeroId: null });
+    },
+    onError: (e) => toast.erro(mensagemDeErro(e)),
+  });
 
   const dados = detalhe.data;
   useEffect(() => {
@@ -278,6 +287,21 @@ function DmAberta({ conversaId }: { conversaId: number }) {
             >
               <Icone nome="instagram" tamanho={16} />
             </a>
+          )}
+          {(papel === "admin" || papel === "superadmin") && (
+            <button
+              type="button"
+              disabled={apagarDados.isPending}
+              onClick={() => {
+                if (window.confirm("A pessoa pediu a exclusão dos dados (LGPD)? Isto apaga de vez esta conversa, as mensagens e os arquivos. Não dá para desfazer."))
+                  apagarDados.mutate({ conversaId });
+              }}
+              aria-label="Apagar os dados desta pessoa (LGPD)"
+              title="Apagar os dados desta pessoa (LGPD)"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-2 transition-colors hover:bg-red-50 hover:text-red-700"
+            >
+              <Icone nome="lixeira" tamanho={16} />
+            </button>
           )}
           {estado?.botConfigurado && <InterruptorDaIa ativa={dados.iaAtiva} onAlternar={(ativa) => definirIa.mutate({ conversaId, ativa })} />}
         </div>

@@ -22,6 +22,10 @@ ARG VITE_API_URL=/trpc
 ARG VITE_TELEFONES_TESTE=
 RUN VITE_API_URL=$VITE_API_URL VITE_TELEFONES_TESTE=$VITE_TELEFONES_TESTE pnpm --filter @atendimento-academias/web build
 
+# O usuário da aplicação (node) lê tudo, mas não altera o código: permissões vindas da máquina de quem
+# monta a imagem (arquivo 600, por exemplo) não podem impedir a leitura.
+RUN chmod -R a+rX,go-w /app
+
 ENV NODE_ENV=production \
     WEB_DIST=/app/apps/web/dist \
     PAINEL_HOST=0.0.0.0 \
@@ -33,4 +37,7 @@ EXPOSE 3334 3333
 # Áudios, figurinhas e imagens do agente: montar um volume aqui para não perder a cada deploy.
 VOLUME ["/app/uploads"]
 
+# A aplicação roda como o usuário "node", sem privilégios de root (entrypoint.sh acerta a pasta de arquivos
+# e troca de usuário antes de subir). O código e as dependências ficam só para leitura dela.
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["node", "scripts/iniciar-producao.mjs"]

@@ -41,6 +41,7 @@ import {
   subirImagemParaHandle,
 } from "../../meta/graph.js";
 import { salvarBuffer } from "../../media/armazenamento.js";
+import { motivoUrlRecusada } from "../../rede/urlExterna.js";
 import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
 
 export function erroDaMeta(erro: unknown): TRPCError {
@@ -387,6 +388,8 @@ export const configuracoesRouter = router({
     if (input.modo === "n8n" && !input.webhookN8nUrl) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a URL do webhook do n8n para usar esse modo." });
     }
+    const recusada = input.webhookN8nUrl ? motivoUrlRecusada(input.webhookN8nUrl) : null;
+    if (recusada) throw new TRPCError({ code: "BAD_REQUEST", message: `URL do n8n: ${recusada}` });
     await salvarConfiguracaoDoAgente(ctx.db, ctx.unidadeId, input.modo, input.webhookN8nUrl || null);
     return { ok: true };
   }),

@@ -1,7 +1,23 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { Context } from "./context.js";
 
-const t = initTRPC.context<Context>().create();
+// Erro inesperado (banco fora, bug) não vai para o navegador como veio: a mensagem do Drizzle, por exemplo,
+// traz o SQL e os parâmetros da consulta. Quem usa o painel vê uma mensagem genérica; o detalhe fica no log
+// (onError em index.ts). Erros que o código lança de propósito (TRPCError com mensagem) passam como estão.
+const MENSAGEM_ERRO_INTERNO = "Algo deu errado do nosso lado. Tente de novo em instantes.";
+
+const t = initTRPC.context<Context>().create({
+  errorFormatter({ shape, error }) {
+    if (error.code !== "INTERNAL_SERVER_ERROR") return { ...shape, data: { ...shape.data, stack: undefined } };
+    // Lançado de propósito com código interno e mensagem própria (ex.: "Falha ao falar com a Meta"): mantém.
+    const proposital = !error.cause || error.cause === error;
+    return {
+      ...shape,
+      message: proposital ? shape.message : MENSAGEM_ERRO_INTERNO,
+      data: { ...shape.data, stack: undefined },
+    };
+  },
+});
 
 export const router = t.router;
 

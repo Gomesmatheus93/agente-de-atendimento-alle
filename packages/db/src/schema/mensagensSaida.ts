@@ -35,5 +35,7 @@ export const mensagensSaida = pgTable(
   (table) => ({
     telefoneIdx: index("mensagens_saida_telefone_idx").on(table.telefone, table.createdAt),
     mensagemExternaIdx: index("mensagens_saida_mensagem_externa_idx").on(table.mensagemExternaId),
+    // /uploads confere de qual unidade é o arquivo pedido.
+    midiaIdx: index("mensagens_saida_midia_idx").on(table.midiaUrl),
   }),
 );
