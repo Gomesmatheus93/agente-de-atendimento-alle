@@ -25,6 +25,8 @@ export interface ResultadoDaAnalise {
   perguntas: Array<{ tema: string; pergunta: string; mensagem: number; sanada: boolean }>;
   tokensEntrada: number;
   tokensSaida: number;
+  // Modelo que respondeu (o custo depende dele).
+  modelo: string;
 }
 
 // Structured outputs: a resposta sai sempre neste formato (sem texto solto para interpretar).
@@ -151,6 +153,7 @@ export class AnalistaConversas {
       tokensEntrada:
         resposta.usage.input_tokens + (resposta.usage.cache_read_input_tokens ?? 0) + (resposta.usage.cache_creation_input_tokens ?? 0),
       tokensSaida: resposta.usage.output_tokens,
+      modelo: resposta.model,
     };
   }
 }

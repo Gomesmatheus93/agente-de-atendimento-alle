@@ -141,6 +141,13 @@
       "when": 1792070427129,
       "tag": "0019_automacoes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792072528664,
+      "tag": "0020_financeiro",
+      "breakpoints": true
     }
   ]
 }

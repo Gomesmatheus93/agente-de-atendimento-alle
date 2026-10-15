@@ -13,3 +13,4 @@ export * from "./funil.js";
 export * from "./queues.js";
 export * from "./schemas/contatos.js";
 export * from "./schemas/automacoes.js";
+export * from "./schemas/financeiro.js";

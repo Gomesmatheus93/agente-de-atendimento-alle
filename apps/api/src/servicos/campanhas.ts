@@ -16,6 +16,7 @@ import {
   type CriarCampanhaInput,
 } from "@atendimento-academias/shared";
 import { TRPCError } from "@trpc/server";
+import { lerConfigFinanceiro } from "../financeiro/config.js";
 import { and, eq } from "drizzle-orm";
 import { getDisparoQueue } from "../queue.js";
 
@@ -69,6 +70,7 @@ export async function criarCampanha(
     });
   }
 
+  const { precos: precosDaUnidade } = await lerConfigFinanceiro(db, unidadeId);
   const placeholders = extrairPlaceholders(template.conteudo);
 
   // Cada destinatário tem os próprios valores, então a validação é linha a linha: a Meta recusa
@@ -108,7 +110,8 @@ export async function criarCampanha(
         nome: input.nome,
         templateId: template.id,
         numeroId: numero.id,
-        custoUnitario: precoDaCategoria(template.categoria).toFixed(4),
+        // Preço da unidade (tela Financeiro) congelado na campanha: mudar depois não altera o custo dela.
+        custoUnitario: (precosDaUnidade[template.categoria] ?? precoDaCategoria(template.categoria)).toFixed(4),
         ...(disparoAgendado ? { status: "agendada" as const, disparoEm: disparoAgendado } : {}),
       })
       .returning({ id: campanhasDisparo.id });

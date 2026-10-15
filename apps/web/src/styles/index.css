@@ -18,6 +18,8 @@
      tons que passam nos testes de daltonismo e contraste; "não fechou" vai em textura cinza. */
   --color-graf-1: #6a24a8;
   --color-graf-2: #ef6a10;
+  /* Terceira série (validada com as duas primeiras nos dois temas). */
+  --color-graf-3: #199e70;
   --color-graf-trilho: #ece7f3;
 
   /* Cores da Allp Fit, do manual de marca publicado no site (allpfit.com.br): roxo #470e75, laranja
@@ -68,6 +70,8 @@
 :root {
   --color-graf-1: #6a24a8;
   --color-graf-2: #ef6a10;
+  /* Terceira série (validada com as duas primeiras nos dois temas). */
+  --color-graf-3: #199e70;
   --color-graf-trilho: #ece7f3;
   --color-surface-2: #f6f4f9;
 }
@@ -168,6 +172,7 @@ html[data-theme="dark"] {
 
   --color-graf-1: #a074dc;
   --color-graf-2: #d8631a;
+  --color-graf-3: #199e70;
   --color-graf-trilho: #2b2140;
 
   /* No escuro o roxo precisa clarear para continuar legível sobre o fundo. */

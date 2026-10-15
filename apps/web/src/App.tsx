@@ -22,6 +22,7 @@ import { Saude } from "./pages/Saude.js";
 import { Contatos } from "./pages/Contatos.js";
 import { Rede } from "./pages/Rede.js";
 import { Automacoes } from "./pages/Automacoes.js";
+import { Financeiro } from "./pages/Financeiro.js";
 
 export function App() {
   const utils = trpc.useUtils();
@@ -222,6 +223,12 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
       return (
         <Layout telaAtiva="contatos" titulo="Contatos" descricao="Alunos, leads e ex-alunos da unidade, com etiquetas e segmentos para as campanhas.">
           <Contatos />
+        </Layout>
+      );
+    case "financeiro":
+      return (
+        <Layout telaAtiva="financeiro" titulo="Financeiro" descricao="Tudo o que a unidade gasta com mensagens, IA e outros custos, e o que volta em matrículas.">
+          <Financeiro />
         </Layout>
       );
     case "automacoes":

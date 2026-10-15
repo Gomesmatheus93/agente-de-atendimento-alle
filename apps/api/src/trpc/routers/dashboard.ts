@@ -25,13 +25,13 @@ const MAX_MOTIVOS = 5;
 const MAX_ATENCAO = 5;
 const MAX_PROXIMOS = 4;
 // Acima disso o gráfico agrupa por mês: centenas de barras de um dia ficam ilegíveis.
-const MAX_DIAS_POR_DIA = 92;
+export const MAX_DIAS_POR_DIA = 92;
 
 const DIAS_DO_PERIODO = { "7d": 7, "30d": 30, "90d": 90, "1a": 365 } as const;
 
 // Traduz o período escolhido na tela em dias do calendário (fuso da operação) e no período anterior,
 // de mesmo tamanho, que serve de comparação. "Todo período" não tem com o que comparar.
-function resolverPeriodo(entrada: ResumoVisaoInput, hoje: string, primeiroDia: string | null) {
+export function resolverPeriodo(entrada: ResumoVisaoInput, hoje: string, primeiroDia: string | null) {
   let inicio: string;
   let fim = hoje;
   switch (entrada.periodo) {

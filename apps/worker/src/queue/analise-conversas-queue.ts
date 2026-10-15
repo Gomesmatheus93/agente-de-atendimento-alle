@@ -9,6 +9,7 @@ import {
   mensagensSaida,
   numerosWhatsapp,
   respostasClientes,
+  usoIa,
   type Db,
 } from "@atendimento-academias/db";
 import {
@@ -114,6 +115,11 @@ async function analisarConversa(
   const [contato] = await db.select({ nome: contatos.nomePerfil }).from(contatos).where(eq(contatos.telefone, conversa.telefone));
   const resultado = await analista.analisar(mensagens, contato?.nome ?? null, temas);
   if (!resultado) return null;
+  // Para a tela Financeiro: quanto de IA a análise desta unidade gastou.
+  await db
+    .insert(usoIa)
+    .values({ numeroId: conversa.numeroId, origem: "analise", modelo: resultado.modelo, tokensEntrada: resultado.tokensEntrada, tokensSaida: resultado.tokensSaida })
+    .catch((erro: unknown) => console.error("[analise] não foi possível registrar o uso da IA:", erro));
 
   const analise = {
     resumo: resultado.resumo || null,
