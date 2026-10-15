@@ -84,7 +84,7 @@ describe("papéis", () => {
   it("membro não faz o que é de admin", async () => {
     await expect(como(a.membro).api.usuarios.listar()).rejects.toThrow(/administrador/);
     await expect(como(a.membro).api.conversas.apagarDadosDoCliente({ telefone: TEL_B, numeroId: a.numeroId })).rejects.toThrow(/administrador/);
-    await expect(como(a.membro).api.saude.verificarAgora()).rejects.toThrow(/administrador/);
+    await expect(como(a.membro).api.saude.verificarAgora()).rejects.toThrow(/responsável pela plataforma/);
   });
 
   it("admin não cria superadmin nem vê a rede", async () => {
@@ -93,6 +93,20 @@ describe("papéis", () => {
     ).rejects.toThrow();
     await expect(como(a.admin).api.rede.resumo({ dias: 30 })).rejects.toThrow(/superadmin/);
     await expect(como(a.admin).api.unidades.listar()).rejects.toThrow(/superadmin/);
+  });
+
+  it("configuração técnica (WhatsApp, n8n, EVO, templates, saúde) é só do responsável pela plataforma", async () => {
+    const admin = como(a.admin).api;
+    await expect(admin.configuracoes.salvarModoAgente({ modo: "n8n", webhookN8nUrl: "https://n8n.exemplo.com/w" } as never)).rejects.toThrow(/responsável pela plataforma/);
+    await expect(admin.configuracoes.gerarChaveIntegracao()).rejects.toThrow(/responsável pela plataforma/);
+    await expect(admin.templates.criar({} as never)).rejects.toThrow();
+    await expect(admin.saude.verificarAgora()).rejects.toThrow(/responsável pela plataforma/);
+    await expect(admin.evo.salvar({ dns: "x", chave: "y", idBranch: null })).rejects.toThrow(/responsável pela plataforma/);
+    // O que o admin usa no dia a dia continua: listar números e templates para criar campanha.
+    await expect(admin.configuracoes.listar()).resolves.toBeTruthy();
+    await expect(admin.templates.listar({ numeroId: a.numeroId })).resolves.toBeTruthy();
+    // O superadmin, dentro da unidade, configura.
+    await expect(como(await criarSuperadmin(a.id)).api.configuracoes.gerarChaveIntegracao()).resolves.toMatchObject({ chave: expect.any(String) });
   });
 
   it("superadmin vê a rede inteira", async () => {

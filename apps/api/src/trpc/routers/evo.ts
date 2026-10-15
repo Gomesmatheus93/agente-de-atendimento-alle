@@ -5,7 +5,7 @@ import { lerValor } from "../../config/plataforma.js";
 import { CHAVE_EVO_CHAVE_FINAL, configEvo, ErroEvo, salvarConfigEvo, testarEvo } from "../../evo/cliente.js";
 import { cadastrarNoEvo, dadosDeCadastroSchema, situacaoParaIa } from "../../evo/integracao.js";
 import { garantirNumeroDaUnidade } from "../../servicos/conversas.js";
-import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
+import { procedimentoPlataforma, procedimentoUnidade, router } from "../trpc.js";
 
 function erroDoEvo(erro: unknown): TRPCError {
   if (erro instanceof ErroEvo) return new TRPCError({ code: erro.status === 412 ? "PRECONDITION_FAILED" : "BAD_REQUEST", message: erro.message });
@@ -26,7 +26,7 @@ export const evoRouter = router({
   }),
 
   // Testa antes de salvar: DNS ou chave errados não chegam a ser gravados.
-  salvar: procedimentoAdmin
+  salvar: procedimentoPlataforma
     .input(
       z.object({
         dns: z.string().trim().min(2, "Informe o DNS da academia no EVO").max(100),

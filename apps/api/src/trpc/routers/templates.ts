@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, eq } from "drizzle-orm";
 import { salvarBuffer } from "../../media/armazenamento.js";
 import { criarTemplateNaMeta, subirImagemParaHandle } from "../../meta/graph.js";
-import { procedimentoUnidade, router } from "../trpc.js";
+import { procedimentoPlataforma, procedimentoUnidade, router } from "../trpc.js";
 import { CATEGORIA_POR_NOME, erroDaMeta } from "./configuracoes.js";
 
 const CATEGORIA_NA_META = { marketing: "MARKETING", utilidade: "UTILITY" } as const;
@@ -121,7 +121,7 @@ export const templatesRouter = router({
 
   // Cria o template na Meta e guarda aqui como PENDING. A aprovação (ou reprovação, com motivo) chega
   // depois pelo webhook, no campo message_template_status_update; "Atualizar da Meta" também traz.
-  criar: procedimentoUnidade.input(criarTemplateInputSchema).mutation(async ({ ctx, input }) => {
+  criar: procedimentoPlataforma.input(criarTemplateInputSchema).mutation(async ({ ctx, input }) => {
     const [conta] = await ctx.db
       .select()
       .from(contasWhatsapp)
@@ -194,7 +194,7 @@ export const templatesRouter = router({
   }),
 
   // Imagem usada no envio de um template que tem cabeçalho de imagem (importado da Meta sem ela, ou para trocar).
-  definirImagem: procedimentoUnidade.input(definirImagemTemplateInputSchema).mutation(async ({ ctx, input }) => {
+  definirImagem: procedimentoPlataforma.input(definirImagemTemplateInputSchema).mutation(async ({ ctx, input }) => {
     const [template] = await ctx.db
       .select()
       .from(templatesWhatsapp)

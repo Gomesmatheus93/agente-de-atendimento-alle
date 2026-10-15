@@ -2,7 +2,7 @@ import { verificacoesSaude } from "@atendimento-academias/db";
 import { TRPCError } from "@trpc/server";
 import { eq, isNull, or } from "drizzle-orm";
 import { monitorLigado, verificarPlataforma, verificarUnidade } from "../../saude/monitor.js";
-import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
+import { procedimentoPlataforma, procedimentoUnidade, router } from "../trpc.js";
 
 const ORDEM = { falha: 0, atencao: 1, ok: 2 } as const;
 const ESPERA_ENTRE_VERIFICACOES_MS = 30_000;
@@ -51,7 +51,7 @@ export const saudeRouter = router({
   }),
 
   // "Verificar agora": não espera a próxima rodada (ex.: depois de trocar o token).
-  verificarAgora: procedimentoAdmin.mutation(async ({ ctx }) => {
+  verificarAgora: procedimentoPlataforma.mutation(async ({ ctx }) => {
     const ultima = ultimaManual.get(ctx.unidadeId) ?? 0;
     if (Date.now() - ultima < ESPERA_ENTRE_VERIFICACOES_MS) {
       throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Acabou de verificar. Espere alguns segundos." });

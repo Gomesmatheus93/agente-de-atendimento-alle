@@ -84,6 +84,7 @@ function Previa({ texto }: { texto: string }) {
 
 function CartaoAniversario({ estado }: { estado: Estado }) {
   const utils = trpc.useUtils();
+  const superadmin = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel === "superadmin";
   const [config, setConfig] = useState<ConfigAniversario>(() => ({
     ...estado.aniversario,
     numeroId: estado.aniversario.numeroId ?? estado.numeros[0]?.id ?? null,
@@ -130,9 +131,13 @@ function CartaoAniversario({ estado }: { estado: Estado }) {
       {estado.templates.length === 0 ? (
         <p className="text-sm text-ink-2">
           Nenhum template aprovado ainda.{" "}
-          <a href={hrefDe({ tela: "templates", criarNaConta: null })} className="font-semibold text-accent-text hover:underline">
-            Crie um em Templates
-          </a>
+          {superadmin ? (
+            <a href={hrefDe({ tela: "templates", criarNaConta: null })} className="font-semibold text-accent-text hover:underline">
+              Crie um em Templates
+            </a>
+          ) : (
+            "Peça ao responsável pela plataforma um template"
+          )}
           , por exemplo: "Feliz aniversário, {"{{nome}}"}! Hoje seu treino é por nossa conta 🎉".
         </p>
       ) : (

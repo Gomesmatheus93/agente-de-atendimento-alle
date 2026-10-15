@@ -42,7 +42,7 @@ import {
 } from "../../meta/graph.js";
 import { salvarBuffer } from "../../media/armazenamento.js";
 import { motivoUrlRecusada } from "../../rede/urlExterna.js";
-import { procedimentoAdmin, procedimentoUnidade, router } from "../trpc.js";
+import { procedimentoPlataforma, procedimentoUnidade, router } from "../trpc.js";
 
 export function erroDaMeta(erro: unknown): TRPCError {
   if (erro instanceof ErroGraph) {
@@ -169,7 +169,7 @@ export const configuracoesRouter = router({
   }),
 
   // Cadastra ou atualiza uma conta. O token é testado na Meta antes de salvar: se não funcionar, nada é gravado.
-  salvarConta: procedimentoAdmin.input(salvarContaInputSchema).mutation(async ({ ctx, input }) => {
+  salvarConta: procedimentoPlataforma.input(salvarContaInputSchema).mutation(async ({ ctx, input }) => {
     const [existente] = await ctx.db.select().from(contasWhatsapp).where(eq(contasWhatsapp.wabaId, input.wabaId));
     // Uma conta só pode ser de uma unidade: senão as conversas de uma apareceriam na outra.
     if (existente && existente.unidadeId !== ctx.unidadeId) {
@@ -220,7 +220,7 @@ export const configuracoesRouter = router({
     return { contaId, nome, numeros: encontrados };
   }),
 
-  sincronizarNumeros: procedimentoUnidade.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+  sincronizarNumeros: procedimentoPlataforma.input(contaInputSchema).mutation(async ({ ctx, input }) => {
     const conta = await contaDaUnidade(ctx.db, ctx.unidadeId, input.contaId);
 
     try {
@@ -231,7 +231,7 @@ export const configuracoesRouter = router({
     }
   }),
 
-  definirNumeroAtivo: procedimentoAdmin.input(definirNumeroAtivoInputSchema).mutation(async ({ ctx, input }) => {
+  definirNumeroAtivo: procedimentoPlataforma.input(definirNumeroAtivoInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db
       .update(numerosWhatsapp)
       .set({ ativo: input.ativo })
@@ -239,13 +239,13 @@ export const configuracoesRouter = router({
     return { numeroId: input.numeroId, ativo: input.ativo };
   }),
 
-  removerConta: procedimentoAdmin.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+  removerConta: procedimentoPlataforma.input(contaInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.delete(contasWhatsapp).where(and(eq(contasWhatsapp.id, input.contaId), eq(contasWhatsapp.unidadeId, ctx.unidadeId)));
     return { contaId: input.contaId };
   }),
 
   // Traz os templates aprovados da conta para a plataforma, para aparecerem em Nova campanha.
-  sincronizarTemplates: procedimentoUnidade.input(contaInputSchema).mutation(async ({ ctx, input }) => {
+  sincronizarTemplates: procedimentoPlataforma.input(contaInputSchema).mutation(async ({ ctx, input }) => {
     const conta = await contaDaUnidade(ctx.db, ctx.unidadeId, input.contaId);
 
     let daMeta;
@@ -324,7 +324,7 @@ export const configuracoesRouter = router({
     };
   }),
 
-  salvarPerfilDoNumero: procedimentoAdmin.input(salvarPerfilNumeroInputSchema).mutation(async ({ ctx, input }) => {
+  salvarPerfilDoNumero: procedimentoPlataforma.input(salvarPerfilNumeroInputSchema).mutation(async ({ ctx, input }) => {
     const { numero, token } = await numeroComToken(ctx.db, ctx.unidadeId, input.numeroId);
     try {
       // A foto vai pela Resumable Upload API; o perfil recebe só o handle devolvido.
@@ -352,7 +352,7 @@ export const configuracoesRouter = router({
   ),
 
   // Salvar com um nome que já existe troca a imagem: o n8n continua pedindo pelo mesmo nome.
-  salvarMidiaAgente: procedimentoAdmin.input(salvarMidiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  salvarMidiaAgente: procedimentoPlataforma.input(salvarMidiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
     const salvo = await salvarBuffer(Buffer.from(input.imagem.base64, "base64"), input.imagem.mimeType);
     const valores = { midiaUrl: salvo.url, mimeType: input.imagem.mimeType, descricao: input.descricao || null };
     await ctx.db
@@ -362,12 +362,12 @@ export const configuracoesRouter = router({
     return { chave: input.chave };
   }),
 
-  removerMidiaAgente: procedimentoAdmin.input(midiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  removerMidiaAgente: procedimentoPlataforma.input(midiaAgenteInputSchema).mutation(async ({ ctx, input }) => {
     await ctx.db.delete(midiasAgente).where(and(eq(midiasAgente.unidadeId, ctx.unidadeId), eq(midiasAgente.chave, input.chave)));
     return { ok: true };
   }),
 
-  salvarWebhook: procedimentoAdmin.input(salvarWebhookInputSchema).mutation(async ({ ctx, input }) => {
+  salvarWebhook: procedimentoPlataforma.input(salvarWebhookInputSchema).mutation(async ({ ctx, input }) => {
     if (input.verifyToken) await salvarValor(ctx.db, ctx.unidadeId, CHAVE_WEBHOOK_VERIFY_TOKEN, input.verifyToken);
     if (input.appSecret) await salvarValor(ctx.db, ctx.unidadeId, CHAVE_WEBHOOK_APP_SECRET, input.appSecret, true);
     return { ok: true };
@@ -375,16 +375,16 @@ export const configuracoesRouter = router({
 
   // Gera uma chave nova para sistemas externos (n8n, Zapier, etc.) chamarem /integracoes/*. Uma chave
   // nova invalida a anterior; a tela mostra o valor uma única vez, nesta resposta.
-  gerarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db, ctx.unidadeId)),
+  gerarChaveIntegracao: procedimentoPlataforma.mutation(async ({ ctx }) => gerarChaveIntegracao(ctx.db, ctx.unidadeId)),
 
-  revogarChaveIntegracao: procedimentoAdmin.mutation(async ({ ctx }) => {
+  revogarChaveIntegracao: procedimentoPlataforma.mutation(async ({ ctx }) => {
     await revogarChaveIntegracao(ctx.db, ctx.unidadeId);
     return { ok: true };
   }),
 
   // Escolhe quem responde quando a IA está ligada numa conversa: o agente interno (Claude, vira
   // rascunho) ou o webhook do n8n (responde direto). Ver acionarAgenteSeLigado no webhook.
-  salvarModoAgente: procedimentoAdmin.input(salvarModoAgenteInputSchema).mutation(async ({ ctx, input }) => {
+  salvarModoAgente: procedimentoPlataforma.input(salvarModoAgenteInputSchema).mutation(async ({ ctx, input }) => {
     if (input.modo === "n8n" && !input.webhookN8nUrl) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Informe a URL do webhook do n8n para usar esse modo." });
     }

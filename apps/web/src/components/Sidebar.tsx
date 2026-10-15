@@ -43,11 +43,11 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
   {
     titulo: "Administração",
     itens: [
-      { tela: "templates", label: "Templates", href: hrefDe({ tela: "templates", criarNaConta: null }), icone: "documento" },
+      { tela: "templates", label: "Templates", href: hrefDe({ tela: "templates", criarNaConta: null }), icone: "documento", soSuperadmin: true },
       { tela: "automacoes", label: "Automações", href: hrefDe({ tela: "automacoes" }), icone: "relogio", soAdmin: true },
-      { tela: "configuracoes", label: "Configurações", href: hrefDe({ tela: "configuracoes" }), icone: "engrenagem", soAdmin: true },
+      { tela: "configuracoes", label: "Configurações", href: hrefDe({ tela: "configuracoes" }), icone: "engrenagem", soSuperadmin: true },
       { tela: "usuarios", label: "Equipe", href: hrefDe({ tela: "usuarios" }), icone: "usuarios", soAdmin: true },
-      { tela: "saude", label: "Saúde do sistema", href: hrefDe({ tela: "saude" }), icone: "pulso" },
+      { tela: "saude", label: "Saúde do sistema", href: hrefDe({ tela: "saude" }), icone: "pulso", soSuperadmin: true },
       { tela: "rede", label: "Visão da rede", href: hrefDe({ tela: "rede" }), icone: "grafico", soSuperadmin: true },
       { tela: "unidades", label: "Unidades", href: hrefDe({ tela: "unidades" }), icone: "predio", soSuperadmin: true },
     ],
@@ -110,7 +110,8 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   const ehSuperadmin = papel === "superadmin";
   const ehAdmin = papel === "admin" || ehSuperadmin;
   const precisamDeHumano = usePedidosDeHumano().data?.length ?? 0;
-  const problemas = useProblemasDeSaude(comUnidade);
+  // A saúde do sistema é do responsável pela plataforma.
+  const problemas = useProblemasDeSaude(comUnidade && ehSuperadmin);
 
   // Sem unidade escolhida, o superadmin só tem a tela Unidades.
   const grupos = GRUPOS.map((grupo) => ({

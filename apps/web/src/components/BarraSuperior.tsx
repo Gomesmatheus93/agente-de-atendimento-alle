@@ -43,7 +43,8 @@ export function BarraSuperior() {
     (trpc.conversas.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0) +
     (trpc.dmsInstagram.contarNaoLidas.useQuery(undefined, { refetchInterval: 10_000, enabled: comUnidade }).data?.conversas ?? 0);
   const esperando = usePedidosDeHumano().data?.length ?? 0;
-  const problemas = useProblemasDeSaude(comUnidade);
+  // Aviso de saúde do sistema: só para o responsável pela plataforma.
+  const problemas = useProblemasDeSaude(comUnidade && usuario?.papel === "superadmin");
   const sair = trpc.auth.sair.useMutation({ onSettled: () => void utils.invalidate() });
   const [busca, setBusca] = useState("");
   const campo = useRef<HTMLInputElement>(null);

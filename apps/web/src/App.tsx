@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import { Layout } from "./components/Layout.js";
 import { Icone } from "./components/ui/Icone.js";
-import { hrefDe, useRota } from "./lib/route.js";
+import { hrefDe, navegar, useRota } from "./lib/route.js";
 import { trpc } from "./lib/trpc.js";
 import { Login } from "./pages/Login.js";
 import { Campanhas } from "./pages/Campanhas.js";
@@ -57,11 +58,18 @@ export function App() {
     );
   }
 
-  return <Painel semUnidade={estado.data.usuario.unidadeId === null} />;
+  return <Painel semUnidade={estado.data.usuario.unidadeId === null} superadmin={estado.data.usuario.papel === "superadmin"} />;
 }
 
-function Painel({ semUnidade }: { semUnidade: boolean }) {
+function Painel({ semUnidade, superadmin }: { semUnidade: boolean; superadmin: boolean }) {
   const rota = useRota();
+  // Templates, Configurações e Saúde do sistema são do responsável pela plataforma: para os outros, o
+  // endereço leva à Visão geral (o servidor também recusa as ações).
+  const soDaPlataforma = rota.tela === "templates" || rota.tela === "configuracoes" || rota.tela === "saude";
+  useEffect(() => {
+    if (soDaPlataforma && !superadmin) navegar({ tela: "visao-geral" });
+  }, [soDaPlataforma, superadmin]);
+  if (soDaPlataforma && !superadmin) return null;
 
   // A visão da rede não depende de unidade escolhida.
   if (rota.tela === "rede") {

@@ -20,6 +20,7 @@ interface PassoTemplateProps {
 
 export function PassoTemplate({ nome, numeroId, templateId, onNome, onNumero, onTemplate }: PassoTemplateProps) {
   const configuracao = trpc.configuracoes.listar.useQuery();
+  const superadmin = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario?.papel === "superadmin";
   // Os templates são aprovados por conta na Meta: sem número escolhido não dá para saber quais valem.
   const templatesQuery = trpc.templates.listar.useQuery(
     { numeroId: numeroId ?? undefined },
@@ -133,11 +134,18 @@ export function PassoTemplate({ nome, numeroId, templateId, onNome, onNumero, on
                 </span>
                 {template.exigeImagem && !template.temImagem && (
                   <span className="rounded-md bg-amber-50 px-1.5 py-1 text-xs text-amber-900">
-                    Este template usa imagem no cabeçalho e ainda não tem uma. Escolha a imagem em{" "}
-                    <a href={hrefDe({ tela: "templates", criarNaConta: null })} className="font-semibold underline">
-                      Templates
-                    </a>{" "}
-                    antes de disparar.
+                    Este template usa imagem no cabeçalho e ainda não tem uma.{" "}
+                    {superadmin ? (
+                      <>
+                        Escolha a imagem em{" "}
+                        <a href={hrefDe({ tela: "templates", criarNaConta: null })} className="font-semibold underline">
+                          Templates
+                        </a>{" "}
+                        antes de disparar.
+                      </>
+                    ) : (
+                      "Peça ao responsável pela plataforma para escolher a imagem antes de disparar."
+                    )}
                   </span>
                 )}
                 <span className="mt-auto flex flex-wrap items-center gap-1.5 text-xs">

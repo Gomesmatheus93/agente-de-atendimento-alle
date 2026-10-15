@@ -51,6 +51,15 @@ export const procedimentoAdmin = procedimentoUnidade.use(({ ctx, next }) => {
   return next({ ctx });
 });
 
+// Configuração técnica da unidade (WhatsApp, webhook, n8n, EVO, templates, saúde do sistema): só o
+// responsável pela plataforma, dentro da unidade escolhida. O dono da unidade (admin) usa, não configura.
+export const procedimentoPlataforma = procedimentoUnidade.use(({ ctx, next }) => {
+  if (ctx.usuario.papel !== "superadmin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Só o responsável pela plataforma pode fazer isso." });
+  }
+  return next({ ctx });
+});
+
 // Criar e gerenciar unidades: só o dono da plataforma.
 export const procedimentoSuperadmin = procedimentoAutenticado.use(({ ctx, next }) => {
   if (ctx.usuario.papel !== "superadmin") {
