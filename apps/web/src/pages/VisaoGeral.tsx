@@ -2,7 +2,6 @@ import { PERIODOS_VISAO, ROTULO_MOTIVO_PERDA, type MotivoPerda } from "@atendime
 import { keepPreviousData } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { Card } from "../components/Card.js";
-import { PrimeirosPassos } from "../components/PrimeirosPassos.js";
 import { MedidorFunil } from "../components/charts/MedidorFunil.js";
 import { PilulasPorDia } from "../components/charts/PilulasPorDia.js";
 import { EstadoErro, Esqueleto } from "../components/ui/EstadoVazio.js";
@@ -65,8 +64,6 @@ export function VisaoGeral() {
         </p>
         <SeletorPeriodoVisao valor={periodo} onChange={setPeriodo} />
       </div>
-
-      <PrimeirosPassos />
 
       {!dados && consulta.isError && <EstadoErro mensagem={consulta.error.message} onTentarNovamente={() => void consulta.refetch()} />}
       {!dados && consulta.isPending && <Carregando />}
