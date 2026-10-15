@@ -65,7 +65,40 @@ function Marca() {
   );
 }
 
+// Grupos do menu (Operação, Análise, Administração) abrem e fecham; a escolha fica salva neste navegador.
+const CHAVE_GRUPOS_FECHADOS = "menu-grupos-fechados";
+
+function lerGruposFechados(): Set<string> {
+  try {
+    const bruto = localStorage.getItem(CHAVE_GRUPOS_FECHADOS);
+    return new Set(bruto ? (JSON.parse(bruto) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
 function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => void }) {
+  const [fechados, setFechados] = useState<Set<string>>(lerGruposFechados);
+  function alternarGrupo(titulo: string) {
+    setFechados((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(titulo)) proximo.delete(titulo);
+      else proximo.add(titulo);
+      try {
+        localStorage.setItem(CHAVE_GRUPOS_FECHADOS, JSON.stringify([...proximo]));
+      } catch {
+        // sem armazenamento: vale só nesta visita
+      }
+      return proximo;
+    });
+  }
+  // Entrou numa tela de um grupo fechado (por um link, por exemplo): o grupo abre para mostrar onde se está.
+  useEffect(() => {
+    const grupoAtivo = GRUPOS.find((grupo) => grupo.itens.some((item) => item.tela === telaAtiva))?.titulo;
+    if (grupoAtivo && fechados.has(grupoAtivo)) alternarGrupo(grupoAtivo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telaAtiva]);
+
   // Conversas com mensagem ainda não lida; atualiza sozinho para o aviso aparecer sem recarregar.
   const usuario = trpc.auth.estado.useQuery(undefined, { retry: false, staleTime: 30_000 }).data?.usuario;
   const papel = usuario?.papel;
@@ -88,10 +121,43 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
   })).filter((grupo) => grupo.itens.length > 0);
 
   return (
-    <nav aria-label="Principal" className="flex flex-col gap-6">
-      {grupos.map((grupo) => (
-        <div key={grupo.titulo} className="flex flex-col gap-0.5">
-          <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-ink-2/70">{grupo.titulo}</p>
+    <nav aria-label="Principal" className="flex flex-col gap-3">
+      {grupos.map((grupo) => {
+        const fechado = fechados.has(grupo.titulo);
+        const idLista = `menu-grupo-${grupo.titulo.normalize("NFD").replace(/[^a-zA-Z]/g, "").toLowerCase()}`;
+        // Fechado, o grupo ainda avisa que há algo esperando dentro dele.
+        const avisos =
+          (grupo.itens.some((i) => i.tela === "conversas") ? naoLidas + precisamDeHumano : 0) +
+          (grupo.itens.some((i) => i.tela === "saude") ? problemas.total : 0);
+        return (
+        <div key={grupo.titulo} className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => alternarGrupo(grupo.titulo)}
+            aria-expanded={!fechado}
+            aria-controls={idLista}
+            className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-sidebar-ink-2/70 transition-colors hover:text-sidebar-ink"
+          >
+            <span className="flex-1 text-left">{grupo.titulo}</span>
+            {fechado && avisos > 0 && (
+              <span aria-label={`${avisos} aviso(s) dentro de ${grupo.titulo}`} className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-2 px-1 text-[9px] font-bold normal-case tracking-normal text-brand-2-contrast">
+                {avisos > 99 ? "99+" : avisos}
+              </span>
+            )}
+            <span aria-hidden="true" className={`flex transition-transform duration-200 ${fechado ? "-rotate-90" : ""}`}>
+              <Icone nome="seta" tamanho={13} />
+            </span>
+          </button>
+          <div
+            id={idLista}
+            ref={(el) => {
+              // Fechado, os links ficam fora do Tab e do leitor de tela (inert), mesmo durante a animação.
+              if (el) fechado ? el.setAttribute("inert", "") : el.removeAttribute("inert");
+            }}
+            className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${fechado ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"}`}
+          >
+          {/* -ml-5/pl-5: a marca do item ativo (colada na borda do menu) fica dentro do recorte da animação. */}
+          <div className="-ml-5 flex min-h-0 flex-col gap-0.5 overflow-hidden pl-5 pt-1">
           {grupo.itens.map((item) => {
             const ativo = item.tela === telaAtiva;
             return (
@@ -138,8 +204,11 @@ function Menu({ telaAtiva, onNavegar }: { telaAtiva: Tela; onNavegar?: () => voi
               </a>
             );
           })}
+          </div>
+          </div>
         </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }
