@@ -19,7 +19,7 @@ describe("exportações", () => {
     await como(b.admin).api.contatos.salvar({ telefone: "11933334444", nome: "Bruno da B", email: null, etiquetaIds: [] });
     const linhas = await como(a.admin).api.exportacoes.contatos({} as never);
     expect(linhas[0]).toContain("WhatsApp");
-    expect(linhas.slice(1)).toEqual([["Ana", "5511911112222", "ana@x.com", "Aluno", "manual", expect.any(String), "", ""]]);
+    expect(linhas.slice(1)).toEqual([["Ana", "5511911112222", "ana@x.com", "", "Aluno", "manual", expect.any(String), "", ""]]);
   });
 
   it("membro não exporta nada", async () => {

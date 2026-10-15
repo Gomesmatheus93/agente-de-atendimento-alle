@@ -41,11 +41,39 @@ const telefoneContatoSchema = z.string().transform((valor, ctx) => {
 
 const nomeEtiquetaSchema = z.string().trim().min(1, "Dê um nome à etiqueta").max(40, "Etiqueta com até 40 caracteres");
 
+// Data de nascimento como vem de planilha ("15/03/1990", "15/03", "1990-03-15") → "AAAA-MM-DD". Sem ano,
+// usa 2000 (só dia e mês importam para o aniversário). Data impossível → null.
+export function lerDataDeNascimento(texto: string | null | undefined): string | null {
+  const valor = (texto ?? "").trim();
+  if (!valor) return null;
+  let dia: number, mes: number, ano: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(valor);
+  const br = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/.exec(valor);
+  if (iso) [ano, mes, dia] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (br) {
+    [dia, mes] = [Number(br[1]), Number(br[2])];
+    const anoTexto = br[3];
+    ano = !anoTexto ? 2000 : anoTexto.length === 2 ? (Number(anoTexto) > 30 ? 1900 : 2000) + Number(anoTexto) : Number(anoTexto);
+  } else return null;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  if (data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia || ano < 1900 || ano > 2100) return null;
+  return `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+
 export const salvarContatoInputSchema = z.object({
   id: z.number().int().positive().optional(),
   telefone: telefoneContatoSchema,
   nome: z.string().trim().max(150).nullable(),
   email: z.string().trim().email("E-mail inválido").max(200).nullable().or(z.literal("").transform(() => null)),
+  nascimento: z
+    .string()
+    .nullish()
+    .transform((valor, ctx) => {
+      if (!valor) return null;
+      const data = lerDataDeNascimento(valor);
+      if (!data) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Data de nascimento inválida" });
+      return data;
+    }),
   etiquetaIds: z.array(z.number().int().positive()).max(50),
 });
 
@@ -56,6 +84,7 @@ export const importarContatosInputSchema = z.object({
         telefone: z.string().max(40),
         nome: z.string().max(150).optional(),
         email: z.string().max(200).optional(),
+        nascimento: z.string().max(20).optional(),
         etiquetas: z.array(z.string().max(40)).max(20).optional(),
       }),
     )

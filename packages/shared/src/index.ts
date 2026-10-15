@@ -12,3 +12,4 @@ export * from "./duvidas.js";
 export * from "./funil.js";
 export * from "./queues.js";
 export * from "./schemas/contatos.js";
+export * from "./schemas/automacoes.js";

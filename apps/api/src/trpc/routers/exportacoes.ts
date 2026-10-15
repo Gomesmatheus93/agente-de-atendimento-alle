@@ -23,6 +23,7 @@ export const exportacoesRouter = router({
         nome: contatosUnidade.nome,
         telefone: contatosUnidade.telefone,
         email: contatosUnidade.email,
+        nascimento: contatosUnidade.nascimento,
         origem: contatosUnidade.origem,
         criadoEm: contatosUnidade.createdAt,
         ultimaMensagemEm: ultimaMensagem(ctx.unidadeId),
@@ -44,11 +45,12 @@ export const exportacoesRouter = router({
     }
     console.log(`[exportacao] ${ctx.usuario.nome} exportou ${linhas.length} contato(s) da unidade ${ctx.unidadeId}`);
     return [
-      ["Nome", "WhatsApp", "E-mail", "Etiquetas", "Origem", "Na base desde", "Última mensagem", "Não recebe campanhas"],
+      ["Nome", "WhatsApp", "E-mail", "Nascimento", "Etiquetas", "Origem", "Na base desde", "Última mensagem", "Não recebe campanhas"],
       ...linhas.map((l) => [
         l.nome ?? "",
         l.telefone,
         l.email ?? "",
+        l.nascimento ? `${l.nascimento.slice(8, 10)}/${l.nascimento.slice(5, 7)}/${l.nascimento.slice(0, 4)}` : "",
         (etiquetasPorContato.get(l.id) ?? []).join(", "),
         l.origem,
         data(l.criadoEm),

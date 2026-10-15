@@ -1,5 +1,6 @@
 import { router } from "./trpc.js";
 import { authRouter } from "./routers/auth.js";
+import { automacoesRouter } from "./routers/automacoes.js";
 import { notasRouter, respostasRapidasRouter } from "./routers/atendimento.js";
 import { calendarioRouter } from "./routers/calendario.js";
 import { campanhasRouter } from "./routers/campanhas.js";
@@ -24,6 +25,7 @@ import { usuariosRouter } from "./routers/usuarios.js";
 
 export const appRouter = router({
   auth: authRouter,
+  automacoes: automacoesRouter,
   calendario: calendarioRouter,
   campanhas: campanhasRouter,
   configuracoes: configuracoesRouter,

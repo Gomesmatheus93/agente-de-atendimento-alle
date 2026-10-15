@@ -17,6 +17,7 @@ import {
   etiquetarContatosInputSchema,
   filtroContatosSchema,
   importarContatosInputSchema,
+  lerDataDeNascimento,
   MAX_TELEFONES_POR_CAMPANHA,
   normalizarTelefone,
   salvarContatoInputSchema,
@@ -166,6 +167,7 @@ export const contatosRouter = router({
             telefone: contatosUnidade.telefone,
             nome: contatosUnidade.nome,
             email: contatosUnidade.email,
+            nascimento: contatosUnidade.nascimento,
             origem: contatosUnidade.origem,
             criadoEm: contatosUnidade.createdAt,
             ultimaMensagemEm: ultimaMensagem(ctx.unidadeId),
@@ -216,7 +218,7 @@ export const contatosRouter = router({
 
   salvar: procedimentoUnidade.input(salvarContatoInputSchema).mutation(async ({ ctx, input }) => {
     await garantirEtiquetasDaUnidade(ctx.db, ctx.unidadeId, input.etiquetaIds);
-    const dados = { telefone: input.telefone, nome: input.nome || null, email: input.email };
+    const dados = { telefone: input.telefone, nome: input.nome || null, email: input.email, nascimento: input.nascimento };
     let id: number;
     if (input.id) {
       await contatoDaUnidade(ctx.db, ctx.unidadeId, input.id);
@@ -251,7 +253,7 @@ export const contatosRouter = router({
   // Planilha de alunos/leads: telefone obrigatório; nome, e-mail e etiquetas opcionais. Telefone que já
   // está na base é atualizado (e ganha as etiquetas novas, sem perder as que tinha).
   importar: procedimentoUnidade.input(importarContatosInputSchema).mutation(async ({ ctx, input }) => {
-    const porTelefone = new Map<string, { telefone: string; nome: string | null; email: string | null; etiquetas: string[] }>();
+    const porTelefone = new Map<string, { telefone: string; nome: string | null; email: string | null; nascimento: string | null; etiquetas: string[] }>();
     let invalidos = 0;
     for (const linha of input.linhas) {
       const telefone = normalizarTelefone(linha.telefone);
@@ -265,6 +267,7 @@ export const contatosRouter = router({
         telefone,
         nome: linha.nome?.trim() || anterior?.nome || null,
         email: email ?? anterior?.email ?? null,
+        nascimento: lerDataDeNascimento(linha.nascimento) ?? anterior?.nascimento ?? null,
         etiquetas: [...(anterior?.etiquetas ?? []), ...(linha.etiquetas ?? [])],
       });
     }
@@ -278,7 +281,7 @@ export const contatosRouter = router({
       const lote = linhas.slice(inicio, inicio + 500);
       const gravados = await ctx.db
         .insert(contatosUnidade)
-        .values(lote.map((l) => ({ unidadeId: ctx.unidadeId, telefone: l.telefone, nome: l.nome, email: l.email, origem: "importacao" as const })))
+        .values(lote.map((l) => ({ unidadeId: ctx.unidadeId, telefone: l.telefone, nome: l.nome, email: l.email, nascimento: l.nascimento, origem: "importacao" as const })))
         .onConflictDoUpdate({
           target: [contatosUnidade.unidadeId, contatosUnidade.telefone],
           set: {
@@ -286,6 +289,7 @@ export const contatosRouter = router({
               ? sql`coalesce(excluded.nome, ${contatosUnidade.nome})`
               : sql`coalesce(${contatosUnidade.nome}, excluded.nome)`,
             email: sql`coalesce(excluded.email, ${contatosUnidade.email})`,
+            nascimento: sql`coalesce(excluded.nascimento, ${contatosUnidade.nascimento})`,
             updatedAt: sql`now()`,
           },
         })

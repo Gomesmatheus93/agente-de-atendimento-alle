@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { apagarArquivo } from "./armazenamento.js";
 import type { Db } from "./client.js";
-import { notasConversa } from "./schema/atendimento.js";
+import { followupsEnviados, notasConversa } from "./schema/atendimento.js";
 import { contatosUnidade } from "./schema/baseContatos.js";
 import { campanhasDisparo } from "./schema/campanhasDisparo.js";
 import { contatos } from "./schema/contatos.js";
@@ -68,6 +68,7 @@ export async function apagarDadosDoCliente(db: Db, unidadeId: number, telefone: 
       for (const { midiaUrl } of [...recebidas, ...enviadas]) if (midiaUrl) urls.push(midiaUrl);
 
       await tx.delete(notasConversa).where(and(eq(notasConversa.telefone, telefone), inArray(notasConversa.numeroId, numeros)));
+      await tx.delete(followupsEnviados).where(and(eq(followupsEnviados.telefone, telefone), inArray(followupsEnviados.numeroId, numeros)));
       await tx.delete(sugestoesIa).where(and(eq(sugestoesIa.telefone, telefone), inArray(sugestoesIa.numeroId, numeros)));
       await tx.delete(funilClientes).where(and(eq(funilClientes.telefone, telefone), inArray(funilClientes.numeroId, numeros)));
       await tx.delete(duvidasIa).where(and(eq(duvidasIa.telefone, telefone), inArray(duvidasIa.numeroId, numeros)));

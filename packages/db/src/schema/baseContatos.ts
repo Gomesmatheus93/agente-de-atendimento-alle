@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgEnum, pgTable, primaryKey, timestamp, unique, varchar } from "drizzle-orm/pg-core";
+import { date, index, integer, jsonb, pgEnum, pgTable, primaryKey, timestamp, unique, varchar } from "drizzle-orm/pg-core";
 import { timestamps } from "./columns.js";
 import { unidades } from "./unidades.js";
 
@@ -19,6 +19,8 @@ export const contatosUnidade = pgTable(
     telefone: varchar("telefone", { length: 20 }).notNull(),
     nome: varchar("nome", { length: 150 }),
     email: varchar("email", { length: 200 }),
+    // Para a mensagem de aniversário (só dia e mês importam; o ano pode ser qualquer um).
+    nascimento: date("nascimento", { mode: "string" }),
     origem: origemContatoEnum("origem").notNull(),
     ...timestamps(),
   },

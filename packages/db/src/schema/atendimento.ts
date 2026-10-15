@@ -37,3 +37,18 @@ export const notasConversa = pgTable(
   },
   (tabela) => [index("notas_conversa_conversa").on(tabela.numeroId, tabela.telefone, tabela.createdAt)],
 );
+
+// Follow-up automático já enviado depois de uma mensagem do cliente: um por mensagem, para não insistir.
+export const followupsEnviados = pgTable(
+  "followups_enviados",
+  {
+    numeroId: integer("numero_id")
+      .notNull()
+      .references(() => numerosWhatsapp.id, { onDelete: "cascade" }),
+    telefone: varchar("telefone", { length: 20 }).notNull(),
+    // Horário da última mensagem do cliente quando o follow-up saiu.
+    aposMensagemEm: timestamp("apos_mensagem_em", { withTimezone: true }).notNull(),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (tabela) => [unique("followups_enviados_mensagem").on(tabela.numeroId, tabela.telefone, tabela.aposMensagemEm)],
+);

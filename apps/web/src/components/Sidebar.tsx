@@ -43,6 +43,7 @@ const GRUPOS: Array<{ titulo: string; itens: ItemMenu[] }> = [
     titulo: "Administração",
     itens: [
       { tela: "templates", label: "Templates", href: hrefDe({ tela: "templates", criarNaConta: null }), icone: "documento" },
+      { tela: "automacoes", label: "Automações", href: hrefDe({ tela: "automacoes" }), icone: "relogio", soAdmin: true },
       { tela: "configuracoes", label: "Configurações", href: hrefDe({ tela: "configuracoes" }), icone: "engrenagem", soAdmin: true },
       { tela: "usuarios", label: "Equipe", href: hrefDe({ tela: "usuarios" }), icone: "usuarios", soAdmin: true },
       { tela: "saude", label: "Saúde do sistema", href: hrefDe({ tela: "saude" }), icone: "pulso" },

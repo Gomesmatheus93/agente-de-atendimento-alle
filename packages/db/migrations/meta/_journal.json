@@ -134,6 +134,13 @@
       "when": 1792068089732,
       "tag": "0018_indices_midia",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792070427129,
+      "tag": "0019_automacoes",
+      "breakpoints": true
     }
   ]
 }

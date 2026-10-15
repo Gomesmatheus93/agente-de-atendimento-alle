@@ -21,6 +21,7 @@ import { VisaoGeral } from "./pages/VisaoGeral.js";
 import { Saude } from "./pages/Saude.js";
 import { Contatos } from "./pages/Contatos.js";
 import { Rede } from "./pages/Rede.js";
+import { Automacoes } from "./pages/Automacoes.js";
 
 export function App() {
   const utils = trpc.useUtils();
@@ -221,6 +222,12 @@ function Painel({ semUnidade }: { semUnidade: boolean }) {
       return (
         <Layout telaAtiva="contatos" titulo="Contatos" descricao="Alunos, leads e ex-alunos da unidade, com etiquetas e segmentos para as campanhas.">
           <Contatos />
+        </Layout>
+      );
+    case "automacoes":
+      return (
+        <Layout telaAtiva="automacoes" titulo="Automações" descricao="Mensagens que saem sozinhas: aniversário e lembrete para quem parou de responder.">
+          <Automacoes />
         </Layout>
       );
     case "saude":

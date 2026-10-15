@@ -483,6 +483,7 @@ function ModalContato({ contato, onFechar }: { contato: Contato | null; onFechar
   const [nome, setNome] = useState(contato?.nome ?? "");
   const [telefone, setTelefone] = useState(contato ? formatarTelefone(contato.telefone) : "");
   const [email, setEmail] = useState(contato?.email ?? "");
+  const [nascimento, setNascimento] = useState(contato?.nascimento ?? "");
   const [etiquetaIds, setEtiquetaIds] = useState<number[]>(contato?.etiquetaIds ?? []);
   const salvar = trpc.contatos.salvar.useMutation({
     onSuccess: () => {
@@ -495,7 +496,7 @@ function ModalContato({ contato, onFechar }: { contato: Contato | null; onFechar
 
   function enviar(evento: FormEvent) {
     evento.preventDefault();
-    salvar.mutate({ id: contato?.id, nome: nome.trim() || null, telefone, email: email.trim() || null, etiquetaIds });
+    salvar.mutate({ id: contato?.id, nome: nome.trim() || null, telefone, email: email.trim() || null, nascimento: nascimento || null, etiquetaIds });
   }
 
   return (
@@ -512,6 +513,10 @@ function ModalContato({ contato, onFechar }: { contato: Contato | null; onFechar
         <label className="flex flex-col gap-1 text-sm font-medium">
           E-mail <span className="text-xs font-normal text-ink-3">(opcional)</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} className="rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium">
+          Data de nascimento <span className="text-xs font-normal text-ink-3">(opcional; para a mensagem de aniversário)</span>
+          <input type="date" value={nascimento} onChange={(e) => setNascimento(e.target.value)} className="rounded-lg px-3 py-2 text-sm" />
         </label>
         <div className="flex flex-col gap-1 text-sm font-medium">
           Etiquetas
@@ -574,6 +579,7 @@ interface Colunas {
   telefone: number;
   nome: number;
   email: number;
+  nascimento: number;
   etiquetas: number;
 }
 
@@ -587,7 +593,7 @@ function adivinharColunas(cabecalho: string[] | null, linhas: string[][]): Colun
   }
   let nome = achar(/nome|name|cliente|aluno/);
   if (nome === telefone) nome = -1;
-  return { telefone, nome, email: achar(/mail/), etiquetas: achar(/etiqueta|tag|situa|status|tipo/) };
+  return { telefone, nome, email: achar(/mail/), nascimento: achar(/nasc|anivers|birth/), etiquetas: achar(/etiqueta|tag|situa|status|tipo/) };
 }
 
 function ModalImportar({ onFechar }: { onFechar: () => void }) {
@@ -596,7 +602,7 @@ function ModalImportar({ onFechar }: { onFechar: () => void }) {
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
   const [tabela, setTabela] = useState<string[][]>([]);
   const [temCabecalho, setTemCabecalho] = useState(false);
-  const [colunas, setColunas] = useState<Colunas>({ telefone: 0, nome: -1, email: -1, etiquetas: -1 });
+  const [colunas, setColunas] = useState<Colunas>({ telefone: 0, nome: -1, email: -1, nascimento: -1, etiquetas: -1 });
   const [paraTodos, setParaTodos] = useState("");
   const [atualizarNomes, setAtualizarNomes] = useState(true);
   const [enviando, setEnviando] = useState(false);
@@ -630,6 +636,7 @@ function ModalImportar({ onFechar }: { onFechar: () => void }) {
       telefone: l[colunas.telefone] ?? "",
       nome: colunas.nome >= 0 ? l[colunas.nome]?.slice(0, 150) : undefined,
       email: colunas.email >= 0 ? l[colunas.email]?.slice(0, 200) : undefined,
+      nascimento: colunas.nascimento >= 0 ? l[colunas.nascimento]?.slice(0, 20) : undefined,
       etiquetas:
         colunas.etiquetas >= 0
           ? (l[colunas.etiquetas] ?? "")
@@ -701,6 +708,7 @@ function ModalImportar({ onFechar }: { onFechar: () => void }) {
             {seletorDeColuna("WhatsApp", "telefone", false)}
             {seletorDeColuna("Nome", "nome", true)}
             {seletorDeColuna("E-mail", "email", true)}
+            {seletorDeColuna("Nascimento (dd/mm/aaaa)", "nascimento", true)}
             {seletorDeColuna("Etiquetas (separadas por vírgula)", "etiquetas", true)}
           </div>
           <label className="flex flex-col gap-1 text-sm font-medium">

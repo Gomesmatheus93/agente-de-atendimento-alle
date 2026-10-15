@@ -7,6 +7,7 @@ import { criarRotasInstagram } from "./instagram/conexao.js";
 import { criarAvisosDaMeta, paginaExclusao, paginaPrivacidade } from "./instagram/paginasPublicas.js";
 import { ArquivoNaoEncontrado, arquivoDaUnidade, lerArquivo, nomeDoArquivo } from "@atendimento-academias/db";
 import { cabecalhosDeSeguranca } from "./seguranca.js";
+import { iniciarAutomacoes } from "./automacoes/automacoes.js";
 import { iniciarMonitorDeSaude } from "./saude/monitor.js";
 import { createContext, getDb, usuarioDoCookie } from "./trpc/context.js";
 import { appRouter } from "./trpc/router.js";
@@ -133,3 +134,4 @@ webhook.listen(portaWebhook, () => {
 });
 
 iniciarMonitorDeSaude(getDb());
+iniciarAutomacoes(getDb());
